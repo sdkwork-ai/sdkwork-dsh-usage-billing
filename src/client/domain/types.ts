@@ -7,6 +7,7 @@
 import type { CatalogModel } from '../pricing.ts'
 import type { ClientPerf } from '../PerfPanel.tsx'
 import type { ProviderBalance, SubscriptionQuota } from '../../pricing-shared.ts'
+import type { BillingCardSnapshot } from '../billing-service.ts'
 
 // Re-export wire-level types so domain code can import all data shapes from one place.
 export type { ProviderBalance, RelayQuota, SubscriptionQuota } from '../../pricing-shared.ts'
@@ -172,6 +173,8 @@ export interface ProviderBillingGroup {
 export interface UsageBillingInjected {
   checkModels: () => Promise<ModelHealth>
   publishCosts: (costs: { todayCost: number; monthCost: number }) => void
+  /** 发布侧栏卡的完整卡面（设置菜单顶部账号卡复用同一份数字与口径）。 */
+  publishCard: (card: BillingCardSnapshot) => void
   registerOpen: (handler: () => void) => () => void
   /** 原生设置页或 /usage 是否至少一个可用；完全隐藏必须有恢复入口（issue #108 防锁死）。 */
   recoveryEntryAvailable: boolean

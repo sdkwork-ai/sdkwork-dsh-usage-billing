@@ -8,6 +8,14 @@
 
 > 安装建议钉具体版本号，避免包管理器的发布冷静期解析到其他版本。
 
+### v1.8.4-sdkwork.1（2026-11-08）
+
+- **仓库切换到 SDKWork fork**：本仓现为 `sdkwork-ai/sdkwork-dsh-usage-billing`（SDKWork BirdCoder 的内置插件），代码基线是上游 `v1.8.3-alpha.4`。包名 `@kenz1117/dsh-ui-usage-billing` 与 loader 行 id `ui-usage-billing` 保持不变，宿主组合不用改；上游署名与版权保留在 LICENSE 与 README。
+- **侧栏计费卡默认隐藏**：新装用户默认 `mode: 'hidden'`，侧栏底部的费用卡不再常驻；插件设置页仍提供完整卡片 / 紧凑图标 / 完全隐藏，宿主原生设置页（`settings.section`）保留为恢复入口。**已存偏好按原样生效**（`loadBillingCardPrefs` 对已有 `mode` 的偏好不做改写），不会静默改变老用户的界面。
+- **新增：设置菜单账号卡**。注册宿主（fork）新声明的 `settings.menu.account` 座位，卡面画在设置菜单顶部的用户名正下方：今日 / 本周 / 本月主数字、涨跌徽章、近 7 天迷你柱，点击打开完整仪表盘并收起菜单。卡面**不自己取数**——`ctx.billingMetrics` 新增 `BillingCardSnapshot` 发布面（`readCard` / `subscribeCard` / `publishCard`），由侧栏实例发布同一份数字，因此金额、币种、统计范围、环比与取数失败态两处永远一致；老宿主没有该座位时 `ctx.slots.inject` 静默跳过，插件其余表面不受影响。
+- **验证**：插件全量 87 个测试文件 / 890 条用例，887 通过；3 条失败都是 Windows 平台既有差异（`ledger` / `task-queue` 的 `0600` 文件权限断言与锁超时行为），与本次改动无关。新增 5 条设置菜单卡用例（投影口径、点击契约、无快照不画空壳），并更新默认值用例。客户端 bundle **370,498 字节（361.8 KiB，较 v1.8.3-alpha.4 +7,463 字节）**，低于本仓自设 500 KiB 强警告线。宿主侧：`ui-sdkwork-settings-menu` 根菜单规格新增账号卡落位用例，`built-in-usage-billing` 组合规格把 `settings.menu.account` 纳入必须存在的座位。
+- **兼容矩阵不变**（34 项）：本次只改动插件自身的默认偏好与 client 渲染，未新增任何宿主 API 依赖；新座位由宿主声明，插件侧按可选能力接入。
+
 ### v1.8.3-alpha.4（2026-11-07）
 
 - **修复：统计数据一直显示为 0（issue #119）**。报告者在宿主 `0.2.1-rc.2` + 插件 `1.8.3`（Debian）装好插件后，侧栏速览与仪表盘恒为 ¥0 / 0 token，其他统计插件正常。**先定位再动手**：逐项比对宿主源码确认 `0.2.1-rc.2` 与 `0.2.2-rc.1` 的依赖面完全一致（`assistant/message.usage` 形状、`TokenUsage` 字段、`SessionPersistence` 的 list/open/read/revision、`SessionLogOffset` 语义、会话格式 v4、工程目录编码、路由注册 API），并在隔离宿主 `0.2.1-rc.2` 上造一份带用量与会话模型来源的 v4 会话日志实测——插件统计正确（`calls 1 / input 9100 / cacheHit 8000 / cost ¥0.00326`）。**宿主版本不是原因**。

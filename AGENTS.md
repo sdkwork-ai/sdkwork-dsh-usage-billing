@@ -2,6 +2,8 @@
 
 本仓库是 DSH 插件 `@kenz1117/dsh-ui-usage-billing`（用量/费用仪表盘）。改代码前先读这一页——尤其是**双线发布策略**，它决定版本号、npm tag、兼容矩阵的写法。
 
+**本仓是 SDKWork fork**（`sdkwork-ai/sdkwork-dsh-usage-billing`，SDKWork BirdCoder 的内置插件），基线是上游 `v1.8.3-alpha.4`；包名与 loader 行 id `ui-usage-billing` 保持不变，以免破坏宿主组合与上游对照。fork 决定的产品默认值（侧栏计费卡默认隐藏、卡面画在设置菜单用户名下方）写在这里和维护者笔记里，不要把它们当上游行为回推。上游署名与版权见 [LICENSE](LICENSE) 与 [README](README.md)。
+
 ## 正式版 / 预览版双线策略（最重要）
 
 只维护**当前宿主代际的一份 `main` 代码**，正式版与预览版是两个发行通道，不是两套源码、两套兼容矩阵或两个长期开发分支：

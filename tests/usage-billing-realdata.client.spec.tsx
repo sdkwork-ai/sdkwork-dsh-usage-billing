@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { bindSnapshotSelector } from './bind-snapshot-selector'
+import { seedCardPrefs } from './card-prefs-fixture'
 import { UsageBilling } from '../src/client/UsageBilling.tsx'
 import { notifiedKeys } from '../src/client/domain/notify.ts'
 import { createBillingBudgetStore } from '../src/client/budget-store.ts'
@@ -29,6 +30,7 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.clear()
+  seedCardPrefs()
   // 跨实例提醒认领的进程内 Set 是模块级状态：清掉前序用例的同键拦截（issue #44）。
   notifiedKeys.clear()
 })
@@ -46,6 +48,7 @@ function makeProps(): ComponentProps<typeof UsageBilling> {
     }),
     // 装饰孔位在单测中无注册者：renderSlot 返回 null。
     publishCosts: () => {},
+    publishCard: () => {},
     registerOpen: () => () => {},
     renderSlot: () => null,
     useStore: bindSnapshotSelector(budgetStore),

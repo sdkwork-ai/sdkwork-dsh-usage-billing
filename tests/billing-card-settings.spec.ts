@@ -17,7 +17,7 @@ describe('计费卡显示偏好', () => {
     localStorage.setItem(BILLING_CARD_STORAGE_KEY, JSON.stringify({ metric: 'tokens', span: 'month', showDelta: false }))
 
     expect(loadBillingCardPrefs()).toEqual({ mode: 'full', metric: 'tokens', span: 'month', showDelta: false })
-    expect(DEFAULT_BILLING_CARD_PREFS.mode).toBe('full')
+    expect(DEFAULT_BILLING_CARD_PREFS.mode).toBe('hidden')
   })
 
   it('非法 mode 回退完整卡片，三档合法值均可持久化', () => {

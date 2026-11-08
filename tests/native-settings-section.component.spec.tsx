@@ -28,6 +28,7 @@ function makeProps(): {
       checked: true, available: true, models: 0, failures: 0, okProviders: [], badProviders: [],
     }),
     publishCosts: () => {},
+    publishCard: () => {},
     registerOpen: (handler: () => void) => {
       commandHandler = handler
       return () => { commandHandler = undefined }
@@ -81,7 +82,7 @@ describe('宿主原生设置页', () => {
       'billing-plugin-info',
     ]) expect(native.getByTestId(id)).toBeTruthy()
     expect(native.getByTestId('billing-card-mode-hidden').getAttribute('aria-pressed')).toBe('true')
-    expect(native.getByTestId('billing-card-mode-hidden-hint').textContent).toContain('恢复显示')
+    expect(native.getByTestId('billing-card-mode-hidden-hint').textContent).toContain('用户名下方')
 
     fireEvent.click(native.getByTestId('billing-card-mode-full'))
 

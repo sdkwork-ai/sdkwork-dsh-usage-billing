@@ -75,6 +75,7 @@ import {
   type UserPriceMap,
 } from './usage-billing-settings.ts'
 import { TrendChart, type TrendMetric, type TrendPoint } from './TrendChart.tsx'
+import { BillingGaugeIcon } from './gauge.tsx'
 import { PerfPanel } from './PerfPanel.tsx'
 import { PluginInfoCard } from './PluginInfoCard.tsx'
 import { TokenPanel, shortNumber } from './TokenPanel.tsx'
@@ -333,44 +334,8 @@ function UsageBillingTrigger(
     }
   }, [popOpen, updatePopPos])
 
-  // 仪表指针水位：当日费用相对近 7 日均值（1.0 = 与日均持平，指针垂直；
-  // 越高越向右满摆）。无数据归零位。窄栏 rail 图标与宽栏卡面共用同一角度。
-  const gaugeAvg = days.length > 0 ? days.reduce((sum, d) => sum + d.cost, 0) / days.length : 0
-  const gaugeWater = gaugeAvg > 0 ? Math.max(0, Math.min(1, todayCost / gaugeAvg)) : 0
-  const gaugeAngle = -80 + gaugeWater * 160
-
-  // 计费 icon：40 viewBox 半圆仪表——低透明度全程轨道弧 + 水位进度弧（弧长随
-  // gaugeWater 伸缩）+ 五档主刻度与细分刻度 + 数据驱动指针。圆心 (20,29)、量程
-  // 半径 15、扫角 ±80°，弧长 = 15 × 160° ≈ 41.9。
-  const cardIcon = (
-    <svg viewBox="3.5 10 34 22" fill="none" stroke="currentColor" strokeLinecap="round" aria-hidden="true">
-      {/* 全程轨道弧（量程 -80° → +80°） */}
-      <path d="M5.23 26.4A15 15 0 0 1 34.77 26.4" strokeWidth={3} opacity={0.16} />
-      {/* 进度弧：当日水位占量程比例，弧长随 30s 轮询平滑伸缩 */}
-      <path
-        d="M5.23 26.4A15 15 0 0 1 34.77 26.4"
-        strokeWidth={3}
-        strokeDasharray={`${(41.9 * gaugeWater).toFixed(2)} 41.9`}
-        className={css.triggerGaugeArc}
-      />
-      {/* 主刻度（五档） */}
-      <path d="M5.23 26.4 8.18 26.92M10.36 17.51 12.29 19.81M20 14v3M27.71 19.81 29.64 17.51M31.82 26.92 34.77 26.4" strokeWidth={1.6} opacity={0.7} />
-      {/* 细分刻度 */}
-      <path d="M7.01 21.5 8.31 22.25M14.87 14.91 15.38 16.31M24.62 16.31 25.13 14.91M31.69 22.25 32.99 21.5" strokeWidth={1.2} opacity={0.38} />
-      {/* 指针：角度随当日水位旋转；CSS transform + transition 让 30s 轮询更新时平滑摆动 */}
-      <line
-        x1="20"
-        y1="29"
-        x2="20"
-        y2="19.5"
-        strokeWidth={2}
-        className={css.triggerGaugeNeedle}
-        style={{ transform: `rotate(${gaugeAngle}deg)`, transformOrigin: '20px 29px' }}
-      />
-      {/* 中心轴点 */}
-      <circle cx="20" cy="29" r="1.5" fill="currentColor" stroke="none" />
-    </svg>
-  )
+  // 计费 icon：与设置菜单账号卡共用同一枚仪表（水位口径见 gauge.tsx）。
+  const cardIcon = <BillingGaugeIcon todayCost={todayCost} days={days} />
 
   // 触发卡 title：取数失败时附上失败标记，鼠标悬停即可看到（issue #119）。
   const triggerTitle = `${t('title')} · ${money(cardPrefs.span === 'day' ? todayCost : cardPrefs.span === 'week' ? weekCost : monthCost)}${statsError === undefined ? '' : ` · ${t('statsLoadFailed')}`}`
@@ -4166,7 +4131,7 @@ function PositionMenu({ liveCostPrefs, onLiveCostPrefs, t }: {
  */
 export function UsageBilling(props: UsageBillingProps): React.ReactNode {
   const {
-    t: hostT, checkModels, publishCosts, registerOpen, navigateToSession, sessionTitleOf, renderSlot, useStore, actions,
+    t: hostT, checkModels, publishCosts, publishCard, registerOpen, navigateToSession, sessionTitleOf, renderSlot, useStore, actions,
     embeddedSettings = false,
   } = props
   // Start empty; swap in real host data when the server serves valid JSON.
@@ -4733,6 +4698,27 @@ export function UsageBilling(props: UsageBillingProps): React.ReactNode {
   useEffect(() => {
     publishCosts({ todayCost, monthCost })
   }, [todayCost, monthCost, publishCosts])
+
+  // 卡面快照：设置菜单顶部的账号卡读它，保证与侧栏卡是同一份数字、同一套口径
+  // （用户价重估 / 币种 / 统计范围 / 取数失败态全部一致，不在第二处重算）。
+  useEffect(() => {
+    publishCard({
+      todayCost,
+      weekCost,
+      monthCost,
+      todayTokens,
+      weekTokens,
+      monthTokens,
+      days: last7,
+      deltaPct,
+      currency,
+      prefs: effectiveCardPrefs,
+      ...(statsError === undefined ? {} : { statsError }),
+    })
+  }, [
+    publishCard, todayCost, weekCost, monthCost, todayTokens, weekTokens, monthTokens,
+    last7, deltaPct, currency, effectiveCardPrefs, statsError,
+  ])
 
   // 仅侧栏实例注册打开回调；原生设置嵌入实例若覆盖它，/usage 将无法打开弹窗。
   useEffect(() => {

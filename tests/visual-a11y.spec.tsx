@@ -17,6 +17,7 @@ import { UsageBilling } from '../src/client/UsageBilling.tsx'
 import { notifiedKeys } from '../src/client/domain/notify.ts'
 import { createBillingBudgetStore } from '../src/client/budget-store.ts'
 import { bindSnapshotSelector } from './bind-snapshot-selector'
+import { seedCardPrefs } from './card-prefs-fixture'
 import { zh, en } from '../src/client/locales.ts'
 
 // 测试套件承担宿主注入角色：目录与别名表在模块加载时全量注入——
@@ -30,6 +31,7 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.clear()
+  seedCardPrefs()
   notifiedKeys.clear()
 })
 
@@ -62,6 +64,7 @@ describe('V-3：厂商健康点状态可访问', () => {
       t: (key: string): string => (zh as Record<string, string>)[key] ?? key,
       checkModels: async () => health,
       publishCosts: () => {},
+      publishCard: () => {},
       registerOpen: () => () => {},
       renderSlot: () => null,
       useStore: bindSnapshotSelector(budgetStore),

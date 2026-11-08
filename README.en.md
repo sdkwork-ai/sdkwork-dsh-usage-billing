@@ -14,6 +14,8 @@
   [English](README.en.md) · [中文](README.md) · [Quick start](#-quick-start) · [Compatibility](COMPATIBILITY.md)
 </div>
 
+> **SDKWork fork.** This repository is [sdkwork-ai/sdkwork-dsh-usage-billing](https://github.com/sdkwork-ai/sdkwork-dsh-usage-billing) — the plugin shipped inside SDKWork BirdCoder, developed on from upstream [kenz1117/dsh-ui-usage-billing](https://github.com/kenz1117/dsh-ui-usage-billing) at `v1.8.3-alpha.4`: the sidebar cost card is hidden by default and the card moved under the user name at the top of the settings menu. Upstream copyright and attribution live in [LICENSE](LICENSE).
+
 ---
 
 ### Demo GIF
@@ -61,7 +63,7 @@ Most billing plugins stop at "token count × unit price". dsh-ui-usage-billing t
 
 ### Sidebar and live feedback
 
-- **Trigger card**: today / week / month headline, 7-day trend and daily gauge; choose a full card, compact icon or hidden entry, with a quick look on hover.
+- **Trigger card**: today / week / month headline, 7-day trend and daily gauge; choose a full card, compact icon or hidden entry. This fork defaults to **hidden**: the card shows under the user name at the top of the settings menu — open the gear for today's spend, click it for the full dashboard — with a quick look on hover.
 - **Cost bar and alerts**: live turn / Session cost, model-aware peak and quota warnings, plus optional system notifications for tier switches and Session completion.
 
 ![Sidebar trigger card: today's spend, delta badge and mini-trend](screenshots/sidebar.png)

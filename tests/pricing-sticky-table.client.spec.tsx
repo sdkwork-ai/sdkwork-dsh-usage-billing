@@ -20,12 +20,14 @@ applyBuiltinCatalog(BUILTIN_MODEL_CATALOG, BUILTIN_MODEL_KEY_ALIASES)
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { bindSnapshotSelector } from './bind-snapshot-selector'
+import { seedCardPrefs } from './card-prefs-fixture'
 import { UsageBilling } from '../src/client/UsageBilling.tsx'
 import { createBillingBudgetStore } from '../src/client/budget-store.ts'
 import { zh } from '../src/client/locales.ts'
 
 beforeEach(() => {
   localStorage.clear()
+  seedCardPrefs()
 })
 
 afterEach(() => {
@@ -61,6 +63,7 @@ describe('费率表 sticky 表头', () => {
         checked: true, available: true, models: 0, failures: 0, okProviders: [], badProviders: [],
       }),
       publishCosts: () => {},
+      publishCard: () => {},
       registerOpen: () => () => {},
       renderSlot: () => null,
       useStore: bindSnapshotSelector(budgetStore),

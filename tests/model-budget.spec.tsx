@@ -14,6 +14,7 @@ import { crossedModelBudgetTiers, monthCostByModel } from '../src/client/domain/
 import { createBillingBudgetStore } from '../src/client/budget-store.ts'
 import { notifiedKeys } from '../src/client/domain/notify.ts'
 import { bindSnapshotSelector } from './bind-snapshot-selector'
+import { seedCardPrefs } from './card-prefs-fixture'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(() => {
@@ -23,6 +24,7 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.clear()
+  seedCardPrefs()
   notifiedKeys.clear()
 })
 
@@ -100,6 +102,7 @@ describe('按模型预算（设置页 UI）', () => {
         checked: true, available: true, models: 0, failures: 0, okProviders: [], badProviders: [],
       }),
       publishCosts: () => {},
+      publishCard: () => {},
       registerOpen: () => () => {},
       renderSlot: () => null,
       useStore: bindSnapshotSelector(budgetStore),

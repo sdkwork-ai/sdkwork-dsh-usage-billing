@@ -28,6 +28,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { UsageBilling } from './UsageBilling.tsx'
 import { NativeSettingsSection } from './NativeSettingsSection.tsx'
+import { SettingsUsageCard } from './SettingsUsageCard.tsx'
+import type { SettingsUsageCardInjected } from './SettingsUsageCard.tsx'
 import type { ModelHealth, UsageBillingInjected } from './domain/types.ts'
 import type { CatalogModel } from './pricing.ts'
 import { LiveCostBar, LiveCostChip } from './live-cost.tsx'
@@ -173,6 +175,7 @@ export function apply(ctx: Context): void {
       }
     },
     publishCosts: (costs) => { metrics.publishCosts(costs) },
+    publishCard: (card) => { metrics.publishCard(card) },
     registerOpen: handler => metrics.registerOpen(handler),
     recoveryEntryAvailable: usageCommandAvailable || nativeSettingsAvailable,
     navigateToSession: (sessionId) => navigator.open(sessionId),
@@ -211,6 +214,20 @@ export function apply(ctx: Context): void {
       dispose()
     }
   })
+
+  // 设置菜单顶部账号卡（座位由宿主 ui-sdkwork-settings-menu 在用户名下方渲染）：
+  // 侧栏卡默认隐藏后，这是最顺手的常驻入口——打开齿轮就能看到今日花费，点击
+  // 打开完整仪表盘。卡面读侧栏实例发布的同一份快照，不重复取数。老宿主没有
+  // 声明该座位时 inject 回调不执行，插件其余表面不受影响。
+  ctx.slots.inject('settings.menu.account', () => ctx.slots.register({
+    name: 'settings.menu.account',
+    locale: NS,
+    inject: (): SettingsUsageCardInjected => ({
+      readCard: () => metrics.readCard(),
+      subscribeCard: listener => metrics.subscribeCard(listener),
+      openDashboard: () => { metrics.openDashboard() },
+    }),
+  }, SettingsUsageCard))
 
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',

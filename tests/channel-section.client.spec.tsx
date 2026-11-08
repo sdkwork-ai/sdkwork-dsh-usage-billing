@@ -41,6 +41,7 @@ const makeProps = (): ComponentProps<typeof UsageBilling> => {
     t,
     checkModels: async () => ({ checked: true, available: true, models: 1, failures: 0, okProviders: [], badProviders: [] }),
     publishCosts: () => {},
+    publishCard: () => {},
     registerOpen: () => () => {},
     renderSlot: () => null,
     // 显式关闭「隐藏未识别/未知」偏好：本批用例测分组逻辑本身，

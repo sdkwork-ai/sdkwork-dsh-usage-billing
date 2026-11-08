@@ -22,6 +22,7 @@ function makeProps(): ComponentProps<typeof UsageBilling> {
     t: (key: string) => (zh as Record<string, string>)[key] ?? key,
     checkModels: async () => ({ checked: true, available: true, models: 1, failures: 0, okProviders: [], badProviders: [] }),
     publishCosts: () => {},
+    publishCard: () => {},
     registerOpen: () => () => {},
     renderSlot: () => null,
     useStore: bindSnapshotSelector(budgetStore),

@@ -46,6 +46,7 @@ function makeProps(): ComponentProps<typeof UsageBilling> {
       checked: true, available: true, models: 1, failures: 0, okProviders: [], badProviders: [],
     }),
     publishCosts: () => {},
+    publishCard: () => {},
     registerOpen: () => () => {},
     navigateToSession: () => 'opened',
     renderSlot: () => null,

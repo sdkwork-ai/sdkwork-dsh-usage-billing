@@ -38,6 +38,7 @@ function makeProps(recoveryEntryAvailable: boolean): {
       checked: true, available: true, models: 0, failures: 0, okProviders: [], badProviders: [],
     }),
     publishCosts: () => {},
+    publishCard: () => {},
     registerOpen: (handler: () => void) => {
       commandHandler = handler
       return () => { commandHandler = undefined }
@@ -88,7 +89,7 @@ describe('侧栏入口三档显示', () => {
 
     fireEvent.click(getByTestId('billing-tab-settings'))
     await waitFor(() => { expect(getByTestId('billing-card-setting')).toBeTruthy() })
-    expect(getByTestId('billing-card-mode-hidden-hint').textContent).toContain('恢复显示')
+    expect(getByTestId('billing-card-mode-hidden-hint').textContent).toContain('用户名下方')
     fireEvent.click(getByTestId('billing-card-mode-full'))
     expect(getByTestId('billing-trigger')).toBeTruthy()
     expect(JSON.parse(localStorage.getItem(BILLING_CARD_STORAGE_KEY) ?? '{}').mode).toBe('full')
@@ -133,7 +134,7 @@ describe('侧栏入口三档显示', () => {
     fireEvent.click(getByTestId('billing-card-mode-hidden'))
     expect(queryByTestId('billing-trigger')).toBeNull()
     expect(queryByTestId('billing-rail-button')).toBeNull()
-    expect(getByTestId('billing-card-mode-hidden-hint').textContent).toContain('/usage')
+    expect(getByTestId('billing-card-mode-hidden-hint').textContent).toContain('用户名下方')
     expect(JSON.parse(localStorage.getItem(BILLING_CARD_STORAGE_KEY) ?? '{}').mode).toBe('hidden')
 
     fireEvent.click(getByTestId('billing-card-mode-full'))

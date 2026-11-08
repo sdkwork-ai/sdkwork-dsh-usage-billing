@@ -14,6 +14,8 @@
   [中文](README.md) · [English](README.en.md) · [快速开始](#-快速开始) · [兼容矩阵](COMPATIBILITY.md)
 </div>
 
+> **SDKWork fork.** 本仓是 [sdkwork-ai/sdkwork-dsh-usage-billing](https://github.com/sdkwork-ai/sdkwork-dsh-usage-billing)——SDKWork BirdCoder 的内置插件，自上游 [kenz1117/dsh-ui-usage-billing](https://github.com/kenz1117/dsh-ui-usage-billing) 的 `v1.8.3-alpha.4` 继续开发：侧栏计费卡默认隐藏，卡面移到设置菜单顶部的用户名下方。上游版权与署名见 [LICENSE](LICENSE)。
+
 ---
 
 ### 演示动图
@@ -61,7 +63,7 @@
 
 ### 侧栏与即时反馈
 
-- **触发卡**：今日 / 本周 / 本月主数字、近 7 天趋势与当日水位；支持完整卡片、紧凑图标、完全隐藏，悬停可看速览。
+- **触发卡**：今日 / 本周 / 本月主数字、近 7 天趋势与当日水位；支持完整卡片、紧凑图标、完全隐藏。本 fork 默认**完全隐藏**：卡面改为显示在设置菜单顶部的用户名下方，点齿轮即可看到今日花费，点击打开完整仪表盘；悬停可看速览。
 - **费用条与提醒**：常驻本轮 / 会话费用，按当前模型显示峰谷和订阅额度预警；切档与会话完成可发系统通知。
 
 ![侧边栏触发卡：今日消耗金额、涨跌徽章与迷你趋势](screenshots/sidebar.png)

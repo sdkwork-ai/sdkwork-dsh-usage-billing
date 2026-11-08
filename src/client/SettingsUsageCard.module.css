@@ -1,0 +1,140 @@
+/* Settings-menu account card (the seat ui-sdkwork-settings-menu renders under the
+ * account identity row). One row of menu chrome: gauge glyph, the card's label +
+ * main figure (+ optional day-over-day badge), and the 7-day sparkline. Tokens
+ * only — the menu surface owns the card material, so this block stays flat and
+ * borrows the shared hover fill instead of drawing a second glass card. */
+
+.card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color);
+  outline-offset: 1px;
+}
+
+/* Instrument glyph: the same gauge the sidebar card draws, in brand blue; a
+ * failed read turns it red so the figures are not mistaken for a real ¥0. */
+.gauge {
+  display: inline-flex;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  color: var(--dsw-alias-brand-primary-new-colorprimary-new-color);
+}
+
+.gauge svg {
+  width: 28px;
+  height: 28px;
+}
+
+.gaugeError {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.label {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.valueRow {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.currency {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.value {
+  overflow: hidden;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Day-over-day badge, mirroring the sidebar card's semantics: a rise in spend
+ * keeps the green capsule the plugin already ships, a fall keeps red. */
+.delta {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.deltaUp {
+  color: var(--dsw-alias-state-success-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent);
+}
+
+.deltaDown {
+  color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
+}
+
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+}
+
+.sparkBar {
+  width: 3px;
+  border-radius: 1px 1px 0 0;
+  background: var(--dsw-alias-brand-primary-new-colorprimary-new-color);
+  opacity: 0.6;
+}
+
+.sparkHot {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}

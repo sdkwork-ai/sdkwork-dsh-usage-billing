@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { bindSnapshotSelector } from './bind-snapshot-selector'
+import { seedCardPrefs } from './card-prefs-fixture'
 import { UsageBilling } from '../src/client/UsageBilling.tsx'
 import { providerFromModelKey } from '../src/client/domain/provider-aliases.ts'
 import { rechargeUrlOf } from '../src/client/domain/recharge.ts'
@@ -18,6 +19,7 @@ import { zh } from '../src/client/locales.ts'
 
 beforeEach(() => { localStorage.clear() })
 
+beforeEach(() => { seedCardPrefs() })
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -37,6 +39,7 @@ describe('UsageBilling surface', () => {
       }),
       // 装饰孔位在单测中无注册者：renderSlot 返回 null；数据桥 stub 空实现。
       publishCosts: () => {},
+      publishCard: () => {},
       registerOpen: () => () => {},
       renderSlot: () => null,
       useStore: bindSnapshotSelector(budgetStore),
@@ -409,6 +412,7 @@ describe('UserPriceCard numeric input drafts (per-keystroke round-trip fix)', ()
         checked: true, available: true, models: 1, failures: 0, okProviders: [], badProviders: [],
       }),
       publishCosts: () => {},
+      publishCard: () => {},
       registerOpen: () => () => {},
       renderSlot: () => null,
       useStore: bindSnapshotSelector(budgetStore),

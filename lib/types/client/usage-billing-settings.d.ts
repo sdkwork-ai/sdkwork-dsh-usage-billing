@@ -61,7 +61,14 @@ export interface BillingCardPrefs {
     /** 是否显示「今日环比」涨跌徽章（默认显示；issue #93：部分用户觉得红色横条太醒目）。 */
     showDelta: boolean;
 }
-/** 默认计费卡偏好：完整卡片 + 花费金额 + 今日口径 + 显示环比徽章。 */
+/**
+ * 默认计费卡偏好：完全隐藏 + 花费金额 + 今日口径 + 显示环比徽章。
+ *
+ * 默认隐藏是本 fork（SDKWork BirdCoder）的产品决定：侧栏不再常驻计费卡，
+ * 卡面改由设置菜单顶部的账号卡承担（`settings.menu.account`，用户名下方），
+ * 那里同样是一个「今日消耗金额」卡面并可直接打开仪表盘。完全隐藏必须有恢复
+ * 入口，宿主原生设置页（`settings.section`）始终在，见 `resolveBillingCardMode`。
+ */
 export declare const DEFAULT_BILLING_CARD_PREFS: BillingCardPrefs;
 /** localStorage key（与 budget store 的 `dsh.ui-usage-billing.*` 命名空间一致）。 */
 export declare const BILLING_CARD_STORAGE_KEY = "dsh.ui-usage-billing.card";
