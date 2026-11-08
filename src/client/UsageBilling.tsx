@@ -1033,7 +1033,7 @@ function BillingDashboard({
   const [motion, setMotionState] = useState<MotionPref>(loadMotion)
   /* v1.5 设置页当前活动组（左侧锚点高亮跟随）。alpha.1 用 click-set
      + 滚动；v1.5.1 加 IntersectionObserver 跟随滚动反向高亮。 */
-  const [activeSettingsGroup, setActiveSettingsGroup] = useState<string>('budget')
+  const [activeSettingsGroup, setActiveSettingsGroup] = useState<string>('composer')
   // 设置页全文搜索（U-4）：查询非空时，关键词未命中的分区隐藏（hidden 属性，
   // 保留 DOM 与锚点 id——清空搜索即恢复，锚点导航不受影响）。
   const [settingsQuery, setSettingsQuery] = useState('')
@@ -2446,6 +2446,11 @@ function BillingDashboard({
                       与 TAB_ICONS 同风格的内联 stroke SVG。 */}
                   {[
                     {
+                      id: 'composer',
+                      icon: <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="2" y="4" width="12" height="8" rx="2" /><path d="M4.5 7h3M4.5 9.5h2" /></svg>,
+                      label: t('settingsNavComposer'),
+                    },
+                    {
                       id: 'display-pref',
                       icon: <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M5 3v10M11 3v10" /><circle cx="5" cy="6.5" r="1.8" /><circle cx="11" cy="9.5" r="1.8" /></svg>,
                       label: t('settingsNavDisplayPref'),
@@ -2510,6 +2515,61 @@ function BillingDashboard({
                       {t('settingsSearchEmpty').replace('{query}', settingsQuery.trim())}
                     </p>
                   )}
+                  {/* 输入框底栏：两枚常驻胶囊（低谷队列 / 价格）的显隐。默认都关，
+                      这里是唯一的开启入口；位置选择跟随价格开关展开。 */}
+                  <section
+                    hidden={settingsSectionHiddenBy(SETTINGS_KEYWORDS.composer)}
+                    className={css.setCard}
+                    data-testid="billing-composer-setting"
+                    id="settings-composer"
+                  >
+                    <div className={css.setCardHead}>
+                      <div className={css.setCardMeta}>
+                        <h3 className={css.setCardTitle}>{t('composerSectionTitle')}</h3>
+                      </div>
+                    </div>
+                    <p className={css.setCardDesc}>{t('composerSectionHint')}</p>
+                    <div className={css.densityRow} data-testid="billing-composer-queue">
+                      <div className={css.densityLeft}>
+                        <strong>{t('composerQueue')}</strong>
+                        <span>{t('composerQueueHint')}</span>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={quickQueuePrefs.showEntry}
+                        aria-label={t('composerQueue')}
+                        data-testid="billing-quick-queue-entry-toggle"
+                        className={clsx(css.switch, quickQueuePrefs.showEntry && css.switchOn)}
+                        onClick={() => onQuickQueuePrefs({ ...quickQueuePrefs, showEntry: !quickQueuePrefs.showEntry })}
+                      >
+                        <span className={css.switchKnob} />
+                      </button>
+                    </div>
+                    <div className={css.densityRow} data-testid="billing-composer-price">
+                      <div className={css.densityLeft}>
+                        <strong>{t('composerPrice')}</strong>
+                        <span>{t('composerPriceHint')}</span>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={liveCostPrefs.show}
+                        aria-label={t('composerPrice')}
+                        data-testid="billing-livecost-toggle"
+                        className={clsx(css.switch, liveCostPrefs.show && css.switchOn)}
+                        onClick={() => onLiveCostPrefs({ ...liveCostPrefs, show: !liveCostPrefs.show })}
+                      >
+                        <span className={css.switchKnob} />
+                      </button>
+                    </div>
+                    {liveCostPrefs.show && (
+                      <div className={css.rdoRow} data-testid="billing-livecost-position">
+                        <span className={css.rdoLabel}>{t('liveCostBarPosition')}</span>
+                        <PositionMenu liveCostPrefs={liveCostPrefs} onLiveCostPrefs={onLiveCostPrefs} t={t} />
+                      </div>
+                    )}
+                  </section>
                   {/* v1.5 新增：密度模式与动效强度开关（设置 - 显示分组最前） */}
                   <div hidden={settingsSectionHiddenBy(SETTINGS_KEYWORDS.display)} className={css.setCard} id="settings-display-pref" data-testid="billing-density-motion-card">
                     <div className={css.setCardHead}>
@@ -2759,8 +2819,9 @@ function BillingDashboard({
                 )}
               </section>
 
-              {/* 3. 功能开关：三个纯显隐/工具开关聚合为一行三列（usage_stats 工具 /
-                  平价消耗胶囊 / 中转站列表），缩短设置页纵向长度。 */}
+              {/* 3. 功能开关：usage_stats 工具 / 中转站列表 / 来源会话复用——三项与
+                  输入框底栏无关的行为开关。底栏两枚胶囊的显隐在「输入框底部内容」卡片
+                  （设置页第一组），不放这里。 */}
               <section hidden={settingsSectionHiddenBy(SETTINGS_KEYWORDS.toggles)} className={css.setCard} data-testid="billing-toggle-setting" id="settings-display">
                 <div className={css.setGrid3}>
                   <div className={css.setCell} data-testid="billing-usage-stats-tool-setting">
@@ -2781,30 +2842,6 @@ function BillingDashboard({
                       </button>
                     </div>
                   </div>
-                  <div className={css.setCell} data-testid="billing-livecost-setting">
-                    <div className={css.setCardHead}>
-                      <div className={css.setCardMeta}>
-                        <h3 className={css.setCardTitle}>{t('liveCostBar')}<HelpTip label={t('liveCostBarHint')} t={t} /></h3>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={liveCostPrefs.show}
-                        aria-label={t('liveCostBar')}
-                        data-testid="billing-livecost-toggle"
-                        className={clsx(css.switch, liveCostPrefs.show && css.switchOn)}
-                        onClick={() => onLiveCostPrefs({ ...liveCostPrefs, show: !liveCostPrefs.show })}
-                      >
-                        <span className={css.switchKnob} />
-                      </button>
-                    </div>
-                    {liveCostPrefs.show && (
-                      <div className={css.rdoRow} data-testid="billing-livecost-position">
-                        <span className={css.rdoLabel}>{t('liveCostBarPosition')}</span>
-                        <PositionMenu liveCostPrefs={liveCostPrefs} onLiveCostPrefs={onLiveCostPrefs} t={t} />
-                      </div>
-                    )}
-                  </div>
                   <div className={css.setCell} data-testid="billing-site-list-setting">
                     <div className={css.setCardHead}>
                       <div className={css.setCardMeta}>
@@ -2818,26 +2855,6 @@ function BillingDashboard({
                         data-testid="billing-site-hide-unidentified"
                         className={clsx(css.switch, sitePrefs.hideUnidentified && css.switchOn)}
                         onClick={() => onSitePrefs({ hideUnidentified: !sitePrefs.hideUnidentified })}
-                      >
-                        <span className={css.switchKnob} />
-                      </button>
-                    </div>
-                  </div>
-                  {/* issue #114：关掉后输入框旁的低谷队列按钮与入队控件一并隐藏；
-                      队列页与用量计费功能不受影响，随时可在此改回。 */}
-                  <div className={css.setCell} data-testid="billing-quick-queue-entry-setting">
-                    <div className={css.setCardHead}>
-                      <div className={css.setCardMeta}>
-                        <h3 className={css.setCardTitle}>{t('quickQueueEntry')}<HelpTip label={t('quickQueueEntryHint')} t={t} /></h3>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={quickQueuePrefs.showEntry}
-                        aria-label={t('quickQueueEntry')}
-                        data-testid="billing-quick-queue-entry-toggle"
-                        className={clsx(css.switch, quickQueuePrefs.showEntry && css.switchOn)}
-                        onClick={() => onQuickQueuePrefs({ ...quickQueuePrefs, showEntry: !quickQueuePrefs.showEntry })}
                       >
                         <span className={css.switchKnob} />
                       </button>
@@ -4055,6 +4072,7 @@ function workspaceTailOf(cwd: string): string {
 /** U-4 设置页分区关键词：搜索查询对每组分词做大小写不敏感子串匹配，
  *  覆盖分区标题、说明与常见同义词（中英双份，避免依赖当前界面语言）。 */
 const SETTINGS_KEYWORDS = {
+  composer: ['输入框', '底栏', '底部', '胶囊', '低谷', '队列', '价格', '费用', 'composer', 'footer', 'capsule', 'queue', 'price', 'cost'],
   display: ['显示', '密度', '动效', '紧凑', '舒适', '克制', '丰富', 'display', 'density', 'motion', 'compact', 'comfortable'],
   budget: ['预算', '金额', '本月', '花费', '进度', 'budget', 'amount', 'spend', 'progress'],
   alert: ['峰谷', '峰', '谷', '提醒', '通知', '预览', '切换', 'peak', 'off-peak', 'alert', 'notify', 'preview'],

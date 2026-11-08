@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { bindSnapshotSelector } from './bind-snapshot-selector'
 import { seedCardPrefs } from './card-prefs-fixture'
 import { UsageBilling } from '../src/client/UsageBilling.tsx'
@@ -263,7 +263,7 @@ describe('UsageBilling surface', () => {
     expect(screen.queryByTestId('billing-hero-budget')).toBeNull()
   })
 
-  it('shows the live-cost capsule toggle by default and persists hiding it with a cross-tree broadcast', async () => {
+  it('defaults the live-cost capsule off and persists showing it with a cross-tree broadcast', async () => {
     // LiveCostBar 与设置面板分属两个 React 树：切换要广播 CustomEvent 通知 dock 侧。
     const events: string[] = []
     const listener = (): void => { events.push('livecost') }
@@ -273,21 +273,20 @@ describe('UsageBilling surface', () => {
       fireEvent.click(screen.getByTestId('billing-trigger'))
       await screen.findByText('使用统计')
       fireEvent.click(await screen.findByTestId('billing-tab-settings'))
-      // 默认显示：开关 aria-checked=true，localStorage 无记录（升级用户零感知）。
+      // 默认不显示（本 fork 收起输入框底部的胶囊）；打开后写入偏好并广播。
       const toggle = await screen.findByTestId('billing-livecost-toggle')
-      expect(toggle.getAttribute('aria-checked')).toBe('true')
-      expect(localStorage.getItem('dsh.ui-usage-billing.livecost')).toBeNull()
-      // 关闭：状态翻转、localStorage 持久化、广播 CustomEvent（dock 侧即时显隐信号）。
-      fireEvent.click(toggle)
       expect(toggle.getAttribute('aria-checked')).toBe('false')
-      expect(JSON.parse(localStorage.getItem('dsh.ui-usage-billing.livecost')!)).toEqual({ show: false, position: 'toolbar' })
+      expect(localStorage.getItem('dsh.ui-usage-billing.livecost')).toBeNull()
+      fireEvent.click(toggle)
+      expect(toggle.getAttribute('aria-checked')).toBe('true')
+      expect(JSON.parse(localStorage.getItem('dsh.ui-usage-billing.livecost')!)).toEqual({ show: true, position: 'toolbar' })
       expect(events).toEqual(['livecost'])
     } finally {
       window.removeEventListener('dsh.ui-usage-billing.livecost-pref', listener)
     }
   })
 
-  it('shows the off-peak queue entry toggle by default and hides the composer entry with it (issue #114)', async () => {
+  it('defaults the off-peak queue entry off and persists showing it (issue #114)', async () => {
     // 设置面板与输入框旁的入口分属两个 React 树：切换要广播 CustomEvent 通知 composer 侧。
     const events: string[] = []
     const listener = (): void => { events.push('quick-queue') }
@@ -297,15 +296,14 @@ describe('UsageBilling surface', () => {
       fireEvent.click(screen.getByTestId('billing-trigger'))
       await screen.findByText('使用统计')
       fireEvent.click(await screen.findByTestId('billing-tab-settings'))
-      // 默认显示：开关 aria-checked=true，localStorage 无记录（升级用户零感知）。
+      // 默认不显示（与价格胶囊同组，都在「输入框底部内容」卡片里）。
       const toggle = await screen.findByTestId('billing-quick-queue-entry-toggle')
-      expect(toggle.getAttribute('aria-checked')).toBe('true')
-      expect(localStorage.getItem('dsh.ui-usage-billing.quick-queue')).toBeNull()
-      // 关闭：状态翻转、localStorage 持久化、广播 CustomEvent（composer 侧即时显隐信号）。
-      fireEvent.click(toggle)
       expect(toggle.getAttribute('aria-checked')).toBe('false')
+      expect(localStorage.getItem('dsh.ui-usage-billing.quick-queue')).toBeNull()
+      fireEvent.click(toggle)
+      expect(toggle.getAttribute('aria-checked')).toBe('true')
       expect(JSON.parse(localStorage.getItem('dsh.ui-usage-billing.quick-queue')!)).toEqual({
-        enabled: false, clearAfterEnqueue: false, showEntry: false, reuseSourceSession: false,
+        enabled: false, clearAfterEnqueue: false, showEntry: true, reuseSourceSession: false,
       })
       expect(events).toEqual(['quick-queue'])
     } finally {
@@ -313,8 +311,22 @@ describe('UsageBilling surface', () => {
     }
   })
 
-  it('keeps the source-Session reuse switch off by default and persists it when turned on (issue #118)', async () => {
-    const events: string[] = []
+  it('groups the two composer-footer switches in one settings card, both off (fork default)', async () => {
+    render(<UsageBilling {...makeProps()} />)
+    fireEvent.click(screen.getByTestId('billing-trigger'))
+    await screen.findByText('使用统计')
+    fireEvent.click(await screen.findByTestId('billing-tab-settings'))
+
+    const card = await screen.findByTestId('billing-composer-setting')
+    expect(card.textContent).toContain('输入框底部内容')
+    // 两枚胶囊同属一张卡：低谷队列与价格，默认都关。
+    expect(within(card).getByTestId('billing-quick-queue-entry-toggle').getAttribute('aria-checked')).toBe('false')
+    expect(within(card).getByTestId('billing-livecost-toggle').getAttribute('aria-checked')).toBe('false')
+    // 位置选择只在价格打开后出现，避免关着的开关下面挂一个无意义的选项。
+    expect(within(card).queryByTestId('billing-livecost-position')).toBeNull()
+  })
+
+  it('keeps the source-Session reuse switch off by default and persists it when turned on (issue #118)', async () => {    const events: string[] = []
     const listener = (): void => { events.push('quick-queue') }
     window.addEventListener('dsh.ui-usage-billing.quick-queue-pref', listener)
     try {

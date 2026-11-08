@@ -295,11 +295,18 @@ export type UsageBillingKey =
   | 'motionSubtle'
   | 'motionRich'
   | 'settingsNavDisplayPref'
+  | 'settingsNavComposer'
   | 'settingsNavBudget'
   | 'settingsNavAlert'
   | 'settingsNavDisplay'
   | 'settingsNavAdvanced'
   | 'settingsNavAbout'
+  | 'composerSectionTitle'
+  | 'composerSectionHint'
+  | 'composerQueue'
+  | 'composerQueueHint'
+  | 'composerPrice'
+  | 'composerPriceHint'
   | 'settingsSearchPlaceholder'
   | 'settingsSearchEmpty'
   | 'sessionsViewAll'
@@ -744,9 +751,16 @@ export const zh: Record<UsageBillingKey, string> = {
   'motionSubtle': '克制',
   'motionRich': '丰富',
   'settingsNavDisplayPref': '偏好',
+  'settingsNavComposer': '输入框底栏',
   'settingsNavBudget': '预算',
   'settingsNavAlert': '提醒',
   'settingsNavDisplay': '显示',
+  'composerSectionTitle': '输入框底部内容',
+  'composerSectionHint': '输入框底部的两枚常驻胶囊，默认都不显示；需要时在这里打开。',
+  'composerQueue': '低谷队列',
+  'composerQueueHint': '在输入框底部显示低谷队列入口与入队控件',
+  'composerPrice': '价格',
+  'composerPriceHint': '在输入框底部显示当前会话的即时费用（平价 / 峰谷）',
   'settingsNavAdvanced': '高级',
   'settingsNavAbout': '关于',
   'settingsSearchPlaceholder': '搜索设置…（如：预算、峰谷、单价）',
@@ -1185,9 +1199,16 @@ export const en: Record<UsageBillingKey, string> = {
   'motionSubtle': 'Subtle',
   'motionRich': 'Rich',
   'settingsNavDisplayPref': 'Preferences',
+  'settingsNavComposer': 'Composer footer',
   'settingsNavBudget': 'Budget',
   'settingsNavAlert': 'Alerts',
   'settingsNavDisplay': 'Display',
+  'composerSectionTitle': 'Composer bottom row',
+  'composerSectionHint': 'The two persistent capsules under the composer. Both are off by default; turn them on here when you want them.',
+  'composerQueue': 'Off-peak queue',
+  'composerQueueHint': 'Show the off-peak queue entry and enqueue controls under the composer',
+  'composerPrice': 'Price',
+  'composerPriceHint': 'Show the current session cost (flat / peak-off-peak) under the composer',
   'settingsNavAdvanced': 'Advanced',
   'settingsNavAbout': 'About',
   'settingsSearchPlaceholder': 'Search settings… (e.g. budget, peak, price)',

@@ -272,14 +272,14 @@ export function saveSiteListPrefs(prefs: SiteListPrefs): void {
  * `LIVE_COST_BAR_PREF_EVENT` CustomEvent（同文档即时生效，跨标签页靠 storage 事件）。
  */
 export interface LiveCostBarPrefs {
-  /** 是否显示输入框下方的即时代费条胶囊（默认 true：保持历史行为）。 */
+  /** 是否显示输入框工具行的即时代价条胶囊（本 fork 默认 false：默认不显示，设置中心可开）。 */
   show: boolean
   /** 胶囊位置：toolbar = 输入框内部工具行内联 chip（默认，issue #47）；below = 输入框下方（宿主 composer.dock 座位）；above = 输入框上方（宿主 input.dock 座位，issue #101）。 */
   position: 'below' | 'above' | 'toolbar'
 }
 
-/** 默认即时代费条偏好：显示在输入框内部（工具行内联 chip，issue #47 反馈「上方/下方」都打断输入视线）。 */
-export const DEFAULT_LIVE_COST_BAR_PREFS: LiveCostBarPrefs = { show: true, position: 'toolbar' }
+/** 默认即时代价条偏好：**不显示**（本 fork 默认收起输入框底部的价格胶囊，需要时到设置中心打开）。 */
+export const DEFAULT_LIVE_COST_BAR_PREFS: LiveCostBarPrefs = { show: false, position: 'toolbar' }
 
 /** localStorage key（与其他 `dsh.ui-usage-billing.*` 偏好同命名空间）。 */
 export const LIVE_COST_BAR_STORAGE_KEY = 'dsh.ui-usage-billing.livecost'
@@ -292,7 +292,8 @@ export function loadLiveCostBarPrefs(): LiveCostBarPrefs {
   const parsed = readJson(LIVE_COST_BAR_STORAGE_KEY)
   if (parsed === null || typeof parsed !== 'object') return { ...DEFAULT_LIVE_COST_BAR_PREFS }
   const prefs = parsed as Partial<LiveCostBarPrefs>
-  // 只有显式 false 才隐藏，其余（缺字段/非法值）一律按显示兜底；
+  // 只有显式 false 才隐藏，其余（缺字段/非法值）一律按显示兜底——**这是存量偏好
+  // 的兼容口径**；全新安装（没有任何存储）走 DEFAULT_LIVE_COST_BAR_PREFS = 不显示。
   // position 仅认显式合法值，缺字段/非法值回默认（issue #47 起默认 toolbar，
   // 老用户已存的 below/above 不受影响）。
   return {
@@ -606,8 +607,9 @@ export interface QuickQueuePrefs {
    * Show the off-peak queue entry beside the composer at all (issue #114).
    *
    * Off hides the persistent switch *and* the enqueue controls; the queue page
-   * stays usable. Default true keeps the entry visible for everyone who never
-   * touched the setting.
+   * stays usable. Fresh installs default to off (this fork hides the composer
+   * footer chips); a stored preference without the field keeps the entry
+   * visible, because that preference predates the switch (issue #114).
    */
   showEntry: boolean
   /**
@@ -621,7 +623,7 @@ export interface QuickQueuePrefs {
   reuseSourceSession: boolean
 }
 
-export const DEFAULT_QUICK_QUEUE_PREFS: QuickQueuePrefs = { enabled: false, clearAfterEnqueue: false, showEntry: true, reuseSourceSession: false }
+export const DEFAULT_QUICK_QUEUE_PREFS: QuickQueuePrefs = { enabled: false, clearAfterEnqueue: false, showEntry: false, reuseSourceSession: false }
 export const QUICK_QUEUE_STORAGE_KEY = 'dsh.ui-usage-billing.quick-queue'
 export const QUICK_QUEUE_PREF_EVENT = 'dsh.ui-usage-billing.quick-queue-pref'
 
@@ -634,7 +636,7 @@ export function loadQuickQueuePrefs(): QuickQueuePrefs {
     enabled: prefs.enabled === true,
     clearAfterEnqueue: prefs.clearAfterEnqueue === true,
     // 只有显式 false 才隐藏入口：老用户存的那份偏好没有这个字段，缺字段一律按显示兜底
-    // （issue #114 —— 偏好损坏不该顺手把入口藏了）。
+    // （issue #114 —— 偏好损坏不该顺手把入口藏了）。全新安装没有存储，走 DEFAULT（不显示）。
     showEntry: prefs.showEntry !== false,
     // 复用来源会话是 opt-in：只有显式 true 才开（issue #118 —— 默认维持「每任务
     // 独立会话」的安全设计）。

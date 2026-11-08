@@ -14,7 +14,7 @@
   [中文](README.md) · [English](README.en.md) · [快速开始](#-快速开始) · [兼容矩阵](COMPATIBILITY.md)
 </div>
 
-> **SDKWork fork.** 本仓是 [sdkwork-ai/sdkwork-dsh-usage-billing](https://github.com/sdkwork-ai/sdkwork-dsh-usage-billing)——SDKWork BirdCoder 的内置插件，自上游 [kenz1117/dsh-ui-usage-billing](https://github.com/kenz1117/dsh-ui-usage-billing) 的 `v1.8.3-alpha.4` 继续开发：侧栏计费卡默认隐藏，卡面移到设置菜单顶部的用户名下方。上游版权与署名见 [LICENSE](LICENSE)。
+> **SDKWork fork.** 本仓是 [sdkwork-ai/sdkwork-dsh-usage-billing](https://github.com/sdkwork-ai/sdkwork-dsh-usage-billing)——SDKWork BirdCoder 的内置插件，自上游 [kenz1117/dsh-ui-usage-billing](https://github.com/kenz1117/dsh-ui-usage-billing) 的 `v1.8.3-alpha.4` 继续开发：侧栏计费卡默认隐藏，卡面移到设置菜单顶部的用户名下方；输入框底部的「低谷队列」与「价格」两枚胶囊默认不显示，可在设置中心的「输入框底部内容」里按需打开。上游版权与署名见 [LICENSE](LICENSE)。
 
 ---
 

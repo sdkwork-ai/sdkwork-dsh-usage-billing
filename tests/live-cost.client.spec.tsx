@@ -118,8 +118,8 @@ describe('lowQuotaChips', () => {
 })
 
 describe('loadLiveCostBarPrefs / saveLiveCostBarPrefs (平价消耗胶囊显隐与位置)', () => {
-  it('defaults to shown + toolbar (inside the composer, issue #47) when the key is missing', () => {
-    expect(loadLiveCostBarPrefs()).toEqual({ show: true, position: 'toolbar' })
+  it('defaults to hidden + toolbar (this fork hides the composer footer chips) when the key is missing', () => {
+    expect(loadLiveCostBarPrefs()).toEqual({ show: false, position: 'toolbar' })
   })
 
   it('round-trips an explicit hide through save + load (legacy below stays intact)', () => {
@@ -140,9 +140,9 @@ describe('loadLiveCostBarPrefs / saveLiveCostBarPrefs (平价消耗胶囊显隐�
     expect(loadLiveCostBarPrefs()).toEqual({ show: true, position: 'toolbar' })
   })
 
-  it('falls back to shown on corrupt JSON or non-boolean values (only explicit false hides)', () => {
+  it('falls back to hidden on corrupt JSON, and keeps a stored preference shown unless it says false', () => {
     localStorage.setItem(LIVE_COST_BAR_STORAGE_KEY, '{broken json')
-    expect(loadLiveCostBarPrefs()).toEqual({ show: true, position: 'toolbar' })
+    expect(loadLiveCostBarPrefs()).toEqual({ show: false, position: 'toolbar' })
     localStorage.setItem(LIVE_COST_BAR_STORAGE_KEY, '{"show":"yes"}')
     expect(loadLiveCostBarPrefs()).toEqual({ show: true, position: 'toolbar' })
     localStorage.setItem(LIVE_COST_BAR_STORAGE_KEY, '{"show":false}')

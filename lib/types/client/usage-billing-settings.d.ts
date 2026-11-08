@@ -123,12 +123,12 @@ export declare function saveSiteListPrefs(prefs: SiteListPrefs): void;
  * `LIVE_COST_BAR_PREF_EVENT` CustomEvent（同文档即时生效，跨标签页靠 storage 事件）。
  */
 export interface LiveCostBarPrefs {
-    /** 是否显示输入框下方的即时代费条胶囊（默认 true：保持历史行为）。 */
+    /** 是否显示输入框工具行的即时代价条胶囊（本 fork 默认 false：默认不显示，设置中心可开）。 */
     show: boolean;
     /** 胶囊位置：toolbar = 输入框内部工具行内联 chip（默认，issue #47）；below = 输入框下方（宿主 composer.dock 座位）；above = 输入框上方（宿主 input.dock 座位，issue #101）。 */
     position: 'below' | 'above' | 'toolbar';
 }
-/** 默认即时代费条偏好：显示在输入框内部（工具行内联 chip，issue #47 反馈「上方/下方」都打断输入视线）。 */
+/** 默认即时代价条偏好：**不显示**（本 fork 默认收起输入框底部的价格胶囊，需要时到设置中心打开）。 */
 export declare const DEFAULT_LIVE_COST_BAR_PREFS: LiveCostBarPrefs;
 /** localStorage key（与其他 `dsh.ui-usage-billing.*` 偏好同命名空间）。 */
 export declare const LIVE_COST_BAR_STORAGE_KEY = "dsh.ui-usage-billing.livecost";
@@ -282,8 +282,9 @@ export interface QuickQueuePrefs {
      * Show the off-peak queue entry beside the composer at all (issue #114).
      *
      * Off hides the persistent switch *and* the enqueue controls; the queue page
-     * stays usable. Default true keeps the entry visible for everyone who never
-     * touched the setting.
+     * stays usable. Fresh installs default to off (this fork hides the composer
+     * footer chips); a stored preference without the field keeps the entry
+     * visible, because that preference predates the switch (issue #114).
      */
     showEntry: boolean;
     /**

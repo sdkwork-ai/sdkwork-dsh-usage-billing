@@ -155,7 +155,9 @@ function stubQueue(options: {
 
 beforeEach(() => {
   localStorage.clear()
-  saveQuickQueuePrefs({ enabled: true, clearAfterEnqueue: false })
+  // 输入框底栏默认不显示（本 fork 的产品默认值）：交互用例显式打开入口，
+  // 需要默认值的用例自己再 clear。
+  saveQuickQueuePrefs({ enabled: true, clearAfterEnqueue: false, showEntry: true })
 })
 
 afterEach(() => {
@@ -168,9 +170,11 @@ afterEach(() => {
 describe('quick queue preferences and opt-in gate', () => {
   it('fails closed on missing, corrupt, or non-boolean preferences', () => {
     localStorage.clear()
-    expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: true, reuseSourceSession: false })
+    expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: false, reuseSourceSession: false })
     localStorage.setItem(QUICK_QUEUE_STORAGE_KEY, '{broken')
-    expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: true, reuseSourceSession: false })
+    expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: false, reuseSourceSession: false })
+    // A stored (readable) preference without the display field keeps the entry:
+    // the switch postdates that preference (issue #114).
     localStorage.setItem(QUICK_QUEUE_STORAGE_KEY, '{"enabled":"yes","clearAfterEnqueue":1}')
     expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: true, reuseSourceSession: false })
   })
@@ -182,6 +186,7 @@ describe('quick queue preferences and opt-in gate', () => {
 
   it('does not render controls or poll by default; the persistent switch enables them live', async () => {
     localStorage.clear()
+    saveQuickQueuePrefs({ showEntry: true })
     const { fetchMock } = stubQueue()
     const view = render(<><QuickQueueToggle t={t} /><QuickQueueEnqueue sessionId={SESSION} t={t} /></>)
     expect(screen.queryByTestId('quick-queue-controls')).toBeNull()

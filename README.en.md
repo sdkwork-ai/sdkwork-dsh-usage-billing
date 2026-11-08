@@ -14,7 +14,7 @@
   [English](README.en.md) · [中文](README.md) · [Quick start](#-quick-start) · [Compatibility](COMPATIBILITY.md)
 </div>
 
-> **SDKWork fork.** This repository is [sdkwork-ai/sdkwork-dsh-usage-billing](https://github.com/sdkwork-ai/sdkwork-dsh-usage-billing) — the plugin shipped inside SDKWork BirdCoder, developed on from upstream [kenz1117/dsh-ui-usage-billing](https://github.com/kenz1117/dsh-ui-usage-billing) at `v1.8.3-alpha.4`: the sidebar cost card is hidden by default and the card moved under the user name at the top of the settings menu. Upstream copyright and attribution live in [LICENSE](LICENSE).
+> **SDKWork fork.** This repository is [sdkwork-ai/sdkwork-dsh-usage-billing](https://github.com/sdkwork-ai/sdkwork-dsh-usage-billing) — the plugin shipped inside SDKWork BirdCoder, developed on from upstream [kenz1117/dsh-ui-usage-billing](https://github.com/kenz1117/dsh-ui-usage-billing) at `v1.8.3-alpha.4`: the sidebar cost card is hidden by default and the card moved under the user name at the top of the settings menu; the two composer-footer capsules (off-peak queue and price) are hidden by default and can be turned on in the settings center's "Composer bottom row" card. Upstream copyright and attribution live in [LICENSE](LICENSE).
 
 ---
 
