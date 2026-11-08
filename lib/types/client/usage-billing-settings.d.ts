@@ -74,7 +74,7 @@ export declare const DEFAULT_BILLING_CARD_PREFS: BillingCardPrefs;
 export declare const BILLING_CARD_STORAGE_KEY = "dsh.ui-usage-billing.card";
 /** 同文档跨 React 树同步：仪表盘设置与宿主原生设置页共用这份偏好。 */
 export declare const BILLING_CARD_PREF_EVENT = "dsh.ui-usage-billing.card-changed";
-/** 读取计费卡偏好（含损坏/缺失回退到默认）。仅在浏览器半区调用。 */
+/** 读取计费卡偏好（含损坏/缺失回退到 fork 默认：完全隐藏）。仅在浏览器半区调用。 */
 export declare function loadBillingCardPrefs(): BillingCardPrefs;
 /** 写入计费卡偏好。失败静默（展示偏好非关键）。 */
 export declare function saveBillingCardPrefs(prefs: BillingCardPrefs): void;
@@ -134,7 +134,7 @@ export declare const DEFAULT_LIVE_COST_BAR_PREFS: LiveCostBarPrefs;
 export declare const LIVE_COST_BAR_STORAGE_KEY = "dsh.ui-usage-billing.livecost";
 /** 设置 Tab 切换后派发的 CustomEvent 名（LiveCostBar 监听它即时显隐）。 */
 export declare const LIVE_COST_BAR_PREF_EVENT = "dsh.ui-usage-billing.livecost-pref";
-/** 读取即时代费条偏好（含损坏/缺失回退到默认）。仅在浏览器半区调用。 */
+/** 读取即时代费条偏好（含损坏/缺失回退到 fork 默认：不显示）。仅在浏览器半区调用。 */
 export declare function loadLiveCostBarPrefs(): LiveCostBarPrefs;
 /** 写入即时代费条偏好。失败静默（展示偏好非关键）。 */
 export declare function saveLiveCostBarPrefs(prefs: LiveCostBarPrefs): void;
@@ -313,4 +313,17 @@ export declare function loadQuickQueuePrefs(): QuickQueuePrefs;
  * `enabled`).
  */
 export declare function saveQuickQueuePrefs(patch: Partial<QuickQueuePrefs>): void;
+/** 输入框底栏默认隐藏的一次性迁移标记（每个浏览器只跑一次）。 */
+export declare const COMPOSER_FOOTER_MIGRATION_KEY = "dsh.ui-usage-billing.composer-footer-hidden";
+/**
+ * 一次性迁移：把输入框底栏两枚胶囊的显示开关关一次（fork 产品默认值）。
+ *
+ * 为什么需要迁移而不是只改默认值：旧版本的默认值是「显示」，而任何一次写偏好
+ * （点一下队列开关、改一次悬浮窗位置…）都会把当时的 `show: true` /
+ * `showEntry: true` 顺手固化进 localStorage——只改默认值救不回这些机器，用户
+ * 仍会看到截图里的胶囊。这里在从未迁移过的浏览器上把两个**显示**字段关一次并
+ * 写标记；其它字段（位置、排队开关、清稿、来源会话复用）原样保留。之后用户在
+ * 设置中心手动打开就按存储值生效，不会被再次覆盖。
+ */
+export declare function migrateComposerFooterDefaults(): void;
 //# sourceMappingURL=usage-billing-settings.d.ts.map

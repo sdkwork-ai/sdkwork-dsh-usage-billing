@@ -143,13 +143,15 @@ export const BILLING_CARD_STORAGE_KEY = 'dsh.ui-usage-billing.card'
 /** 同文档跨 React 树同步：仪表盘设置与宿主原生设置页共用这份偏好。 */
 export const BILLING_CARD_PREF_EVENT = 'dsh.ui-usage-billing.card-changed'
 
-/** 读取计费卡偏好（含损坏/缺失回退到默认）。仅在浏览器半区调用。 */
+/** 读取计费卡偏好（含损坏/缺失回退到 fork 默认：完全隐藏）。仅在浏览器半区调用。 */
 export function loadBillingCardPrefs(): BillingCardPrefs {
   const parsed = readJson(BILLING_CARD_STORAGE_KEY)
   if (parsed === null || typeof parsed !== 'object') return { ...DEFAULT_BILLING_CARD_PREFS }
   const prefs = parsed as Partial<BillingCardPrefs>
   return {
-    mode: prefs.mode === 'compact' || prefs.mode === 'hidden' ? prefs.mode : 'full',
+    // 缺字段 / 非法值走 fork 默认（隐藏）；只有显式 full/compact 才显示——老版本
+    // 存的偏好没有 mode 字段时，不能再按历史默认「完整卡片」把侧栏卡放回来。
+    mode: prefs.mode === 'full' || prefs.mode === 'compact' ? prefs.mode : 'hidden',
     metric: prefs.metric === 'tokens' ? 'tokens' : 'money',
     span: prefs.span === 'week' || prefs.span === 'month' ? prefs.span : 'day',
     // 只有显式 false 才隐藏：老用户已存的偏好没有该字段，缺省保持显示（零感官变化）。
@@ -287,17 +289,17 @@ export const LIVE_COST_BAR_STORAGE_KEY = 'dsh.ui-usage-billing.livecost'
 /** 设置 Tab 切换后派发的 CustomEvent 名（LiveCostBar 监听它即时显隐）。 */
 export const LIVE_COST_BAR_PREF_EVENT = 'dsh.ui-usage-billing.livecost-pref'
 
-/** 读取即时代费条偏好（含损坏/缺失回退到默认）。仅在浏览器半区调用。 */
+/** 读取即时代费条偏好（含损坏/缺失回退到 fork 默认：不显示）。仅在浏览器半区调用。 */
 export function loadLiveCostBarPrefs(): LiveCostBarPrefs {
   const parsed = readJson(LIVE_COST_BAR_STORAGE_KEY)
   if (parsed === null || typeof parsed !== 'object') return { ...DEFAULT_LIVE_COST_BAR_PREFS }
   const prefs = parsed as Partial<LiveCostBarPrefs>
-  // 只有显式 false 才隐藏，其余（缺字段/非法值）一律按显示兜底——**这是存量偏好
-  // 的兼容口径**；全新安装（没有任何存储）走 DEFAULT_LIVE_COST_BAR_PREFS = 不显示。
+  // 只有显式 true 才显示：本 fork 的默认值是不显示，缺字段/非法值一律收起（老版本
+  // 存的对象里没有 show 字段，不能按历史默认把它放回来）。
   // position 仅认显式合法值，缺字段/非法值回默认（issue #47 起默认 toolbar，
   // 老用户已存的 below/above 不受影响）。
   return {
-    show: prefs.show !== false,
+    show: prefs.show === true,
     position: prefs.position === 'above' || prefs.position === 'toolbar' || prefs.position === 'below'
       ? prefs.position
       : DEFAULT_LIVE_COST_BAR_PREFS.position,
@@ -635,9 +637,9 @@ export function loadQuickQueuePrefs(): QuickQueuePrefs {
   return {
     enabled: prefs.enabled === true,
     clearAfterEnqueue: prefs.clearAfterEnqueue === true,
-    // 只有显式 false 才隐藏入口：老用户存的那份偏好没有这个字段，缺字段一律按显示兜底
-    // （issue #114 —— 偏好损坏不该顺手把入口藏了）。全新安装没有存储，走 DEFAULT（不显示）。
-    showEntry: prefs.showEntry !== false,
+    // 只有显式 true 才显示入口：本 fork 的默认值是不显示，缺字段/非法值一律收起
+    // （老版本存的对象里没有 showEntry 字段，不能按历史默认把入口放回来）。
+    showEntry: prefs.showEntry === true,
     // 复用来源会话是 opt-in：只有显式 true 才开（issue #118 —— 默认维持「每任务
     // 独立会话」的安全设计）。
     reuseSourceSession: prefs.reuseSourceSession === true,
@@ -658,5 +660,30 @@ export function saveQuickQueuePrefs(patch: Partial<QuickQueuePrefs>): void {
   writeStored(QUICK_QUEUE_STORAGE_KEY, JSON.stringify({ ...loadQuickQueuePrefs(), ...patch }))
   if (typeof window !== 'undefined' && typeof CustomEvent !== 'undefined') {
     window.dispatchEvent(new CustomEvent(QUICK_QUEUE_PREF_EVENT))
+  }
+}
+
+/** 输入框底栏默认隐藏的一次性迁移标记（每个浏览器只跑一次）。 */
+export const COMPOSER_FOOTER_MIGRATION_KEY = 'dsh.ui-usage-billing.composer-footer-hidden'
+
+/**
+ * 一次性迁移：把输入框底栏两枚胶囊的显示开关关一次（fork 产品默认值）。
+ *
+ * 为什么需要迁移而不是只改默认值：旧版本的默认值是「显示」，而任何一次写偏好
+ * （点一下队列开关、改一次悬浮窗位置…）都会把当时的 `show: true` /
+ * `showEntry: true` 顺手固化进 localStorage——只改默认值救不回这些机器，用户
+ * 仍会看到截图里的胶囊。这里在从未迁移过的浏览器上把两个**显示**字段关一次并
+ * 写标记；其它字段（位置、排队开关、清稿、来源会话复用）原样保留。之后用户在
+ * 设置中心手动打开就按存储值生效，不会被再次覆盖。
+ */
+export function migrateComposerFooterDefaults(): void {
+  try {
+    if (localStorage.getItem(COMPOSER_FOOTER_MIGRATION_KEY) === '1') return
+    saveLiveCostBarPrefs({ ...loadLiveCostBarPrefs(), show: false })
+    saveQuickQueuePrefs({ showEntry: false })
+    localStorage.setItem(COMPOSER_FOOTER_MIGRATION_KEY, '1')
+  } catch {
+    // localStorage 不可用（隐私模式/配额满）：保持默认值路径——全新安装本来就不显示。
+    swallowed('composer-footer-migration-failed')
   }
 }

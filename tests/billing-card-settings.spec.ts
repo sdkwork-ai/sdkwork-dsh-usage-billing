@@ -13,16 +13,19 @@ import {
 beforeEach(() => { localStorage.clear() })
 
 describe('计费卡显示偏好', () => {
-  it('老偏好没有 mode 字段时保持完整卡片', () => {
+  it('老偏好没有 mode 字段时按 fork 默认隐藏（只有显式 full/compact 才显示）', () => {
     localStorage.setItem(BILLING_CARD_STORAGE_KEY, JSON.stringify({ metric: 'tokens', span: 'month', showDelta: false }))
 
-    expect(loadBillingCardPrefs()).toEqual({ mode: 'full', metric: 'tokens', span: 'month', showDelta: false })
+    expect(loadBillingCardPrefs()).toEqual({ mode: 'hidden', metric: 'tokens', span: 'month', showDelta: false })
     expect(DEFAULT_BILLING_CARD_PREFS.mode).toBe('hidden')
+    // 用户显式选过显示时保留。
+    localStorage.setItem(BILLING_CARD_STORAGE_KEY, JSON.stringify({ mode: 'full' }))
+    expect(loadBillingCardPrefs().mode).toBe('full')
   })
 
-  it('非法 mode 回退完整卡片，三档合法值均可持久化', () => {
+  it('非法 mode 回退隐藏，三档合法值均可持久化', () => {
     localStorage.setItem(BILLING_CARD_STORAGE_KEY, JSON.stringify({ mode: 'bogus' }))
-    expect(loadBillingCardPrefs().mode).toBe('full')
+    expect(loadBillingCardPrefs().mode).toBe('hidden')
 
     for (const mode of ['full', 'compact', 'hidden'] as const) {
       saveBillingCardPrefs({ mode, metric: 'money', span: 'day', showDelta: true })

@@ -173,14 +173,17 @@ describe('quick queue preferences and opt-in gate', () => {
     expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: false, reuseSourceSession: false })
     localStorage.setItem(QUICK_QUEUE_STORAGE_KEY, '{broken')
     expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: false, reuseSourceSession: false })
-    // A stored (readable) preference without the display field keeps the entry:
-    // the switch postdates that preference (issue #114).
+    // A stored preference without the display field takes the fork default (hidden):
+    // an entry the user never explicitly enabled stays out of the composer.
     localStorage.setItem(QUICK_QUEUE_STORAGE_KEY, '{"enabled":"yes","clearAfterEnqueue":1}')
-    expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: true, reuseSourceSession: false })
+    expect(loadQuickQueuePrefs()).toEqual({ enabled: false, clearAfterEnqueue: false, showEntry: false, reuseSourceSession: false })
   })
 
-  it('keeps the entry visible for preferences stored before the display switch existed (issue #114)', () => {
+  it('keeps the entry hidden for preferences stored before the display switch existed (fork default)', () => {
     localStorage.setItem(QUICK_QUEUE_STORAGE_KEY, '{"enabled":true,"clearAfterEnqueue":false}')
+    expect(loadQuickQueuePrefs().showEntry).toBe(false)
+    // An explicit on (the settings switch) is preserved.
+    localStorage.setItem(QUICK_QUEUE_STORAGE_KEY, '{"enabled":true,"clearAfterEnqueue":false,"showEntry":true}')
     expect(loadQuickQueuePrefs().showEntry).toBe(true)
   })
 

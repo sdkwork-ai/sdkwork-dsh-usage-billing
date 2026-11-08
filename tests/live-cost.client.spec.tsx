@@ -140,10 +140,14 @@ describe('loadLiveCostBarPrefs / saveLiveCostBarPrefs (平价消耗胶囊显隐�
     expect(loadLiveCostBarPrefs()).toEqual({ show: true, position: 'toolbar' })
   })
 
-  it('falls back to hidden on corrupt JSON, and keeps a stored preference shown unless it says false', () => {
+  it('falls back to hidden on corrupt JSON or a missing/invalid show field (only explicit true shows)', () => {
     localStorage.setItem(LIVE_COST_BAR_STORAGE_KEY, '{broken json')
     expect(loadLiveCostBarPrefs()).toEqual({ show: false, position: 'toolbar' })
     localStorage.setItem(LIVE_COST_BAR_STORAGE_KEY, '{"show":"yes"}')
+    expect(loadLiveCostBarPrefs()).toEqual({ show: false, position: 'toolbar' })
+    localStorage.setItem(LIVE_COST_BAR_STORAGE_KEY, '{"position":"below"}')
+    expect(loadLiveCostBarPrefs()).toEqual({ show: false, position: 'below' })
+    localStorage.setItem(LIVE_COST_BAR_STORAGE_KEY, '{"show":true}')
     expect(loadLiveCostBarPrefs()).toEqual({ show: true, position: 'toolbar' })
     localStorage.setItem(LIVE_COST_BAR_STORAGE_KEY, '{"show":false}')
     expect(loadLiveCostBarPrefs()).toEqual({ show: false, position: 'toolbar' })

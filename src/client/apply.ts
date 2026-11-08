@@ -41,6 +41,7 @@ import { installCompletionNotifier, loadNotifyConfig } from './completion-notify
 import { createSessionNavigator } from './session-navigation.ts'
 import { registerUsageCommand } from './usage-command.ts'
 import { loadLanguage } from './usage-billing-settings.ts'
+import { migrateComposerFooterDefaults } from './usage-billing-settings.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -90,6 +91,10 @@ export const inject = ['slots', 'locale', 'remote', 'sessions']
  * @param ctx - client root context.
  */
 export function apply(ctx: Context): void {
+  // fork 默认值迁移：输入框底栏两枚胶囊默认隐藏。旧版本会把「显示」固化进偏好，
+  // 只改默认值救不回已有存储的机器——这里每个浏览器只关一次（见迁移函数注释）。
+  migrateComposerFooterDefaults()
+
   // 计费指标服务：billing 写入（组件经 inject 回调），主题插件经 ctx.get 读取。
   const metrics = createBillingMetrics()
   ctx.provide('billingMetrics', metrics)
