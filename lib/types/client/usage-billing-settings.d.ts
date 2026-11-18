@@ -117,6 +117,25 @@ export declare function loadSiteListPrefs(): SiteListPrefs;
 /** 写入站点列表偏好。失败静默（展示偏好非关键）。 */
 export declare function saveSiteListPrefs(prefs: SiteListPrefs): void;
 /**
+ * 通道可见性偏好（issue #126 需求）：隐藏部分提供商 / 通道。
+ * 纯 client 偏好，存 localStorage（不依赖 node 半区接口/设置 schema）。
+ *
+ * 存**通道桶 key**（`site:<origin>` / `direct:<provider>` / `unknown`）而不是
+ * 显示名——显示名随界面语言变（中英），桶 key 稳定，偏好能跨语言沿用。
+ */
+export interface ChannelVisibilityPrefs {
+    /** 隐藏的通道桶 key 列表；空 = 全部显示。 */
+    hidden: readonly string[];
+}
+/** 默认通道可见性偏好：全部显示（保持历史行为）。 */
+export declare const DEFAULT_CHANNEL_VISIBILITY_PREFS: ChannelVisibilityPrefs;
+/** localStorage key（与其他 `dsh.ui-usage-billing.*` 偏好同命名空间）。 */
+export declare const CHANNEL_VISIBILITY_STORAGE_KEY = "dsh.ui-usage-billing.channels";
+/** 读取通道可见性偏好（含损坏/缺失回退到默认）。仅在浏览器半区调用。 */
+export declare function loadChannelVisibilityPrefs(): ChannelVisibilityPrefs;
+/** 写入通道可见性偏好。失败静默（展示偏好非关键）。 */
+export declare function saveChannelVisibilityPrefs(prefs: ChannelVisibilityPrefs): void;
+/**
  * 即时代费条（平价消耗胶囊，composer dock 的 LiveCostBar）的显示偏好。
  * 纯 client 偏好，存 localStorage（不依赖 node 半区接口/设置 schema）；
  * 设置 Tab 与 LiveCostBar 分属两个 React 树，跨树同步走 localStorage +
@@ -241,8 +260,9 @@ export declare function loadPerfViewPrefs(): PerfViewPrefs;
 export declare function savePerfViewPrefs(prefs: PerfViewPrefs): void;
 /**
  * 显示密度档位（v1.5 新增）。紧凑档减小行高/字号/内边距，舒适档加大；
- * 默认档保持历史感官。client 端写到 `documentElement.dataset.density`，
- * CSS `[data-density="..."]` 选择器派生 `--ds-density-*` 变量。
+ * 默认档保持历史感官。client 端写到 `documentElement.dataset.dshBillingDensity`
+ * （= `data-dsh-billing-density`，命名空间化防同名属性互相覆盖，issue #124），
+ * CSS `[data-dsh-billing-density="..."]` 选择器派生 `--ds-density-*` 变量。
  */
 export type DensityPref = 'compact' | 'default' | 'comfortable';
 /** localStorage key（与其他 `dsh.ui-usage-billing.*` 偏好同命名空间）。 */
@@ -257,9 +277,11 @@ export declare function loadDensity(): DensityPref;
  *  失败静默（展示偏好非关键）。 */
 export declare function saveDensity(density: DensityPref): void;
 /**
- * 动效强度档位（v1.5 新增）。`off` 冻结全部 transition+animation，
- * `subtle` 抑制 240ms 以上的入场/计数动画但保留 160ms 微交互，
- * `rich` 即默认（全开）。写到 `documentElement.dataset.motion`。
+ * 动效强度档位（v1.5 新增）。`off` 冻结本插件内的全部 transition+animation，
+ * `subtle` 保留 transition 微交互、把关键帧动画压成瞬时，`rich` 即默认（全开）。
+ * 写到 `documentElement.dataset.dshBillingMotion`（= `data-dsh-billing-motion`），
+ * 且压制规则只作用在本插件根容器 `.dsh-billing-root` 之内（issue #124：
+ * 此前通用属性 + 通配符会把宿主与第三方插件的动画一起压平）。
  */
 export type MotionPref = 'off' | 'subtle' | 'rich';
 /** localStorage key（与其他 `dsh.ui-usage-billing.*` 偏好同命名空间）。 */

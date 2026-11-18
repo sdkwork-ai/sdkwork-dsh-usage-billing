@@ -152,7 +152,7 @@ export interface UsageBillingInjected {
         monthCost: number;
     }) => void;
     /** 发布侧栏卡的完整卡面（设置菜单顶部账号卡复用同一份数字与口径）。 */
-    publishCard: (card: BillingCardSnapshot) => void;
+    publishCard?: (card: BillingCardSnapshot) => void;
     registerOpen: (handler: () => void) => () => void;
     /** 原生设置页或 /usage 是否至少一个可用；完全隐藏必须有恢复入口（issue #108 防锁死）。 */
     recoveryEntryAvailable: boolean;
@@ -193,6 +193,12 @@ export interface UsageStats {
     lowBalanceThreshold?: number;
     /** 会话明细（按费用倒序，服务端已封顶）；旧快照可能缺失。 */
     bySession?: readonly SessionBillingRow[];
+    /**
+     * 会话总数（未封顶）：`bySession` 只带花费前 N 行，真实总数此前从未下发——
+     * 会话数超过封顶时面板只能说「共 100 个会话」，是错的。缺省回退按明细行数
+     * （旧快照没有该字段）。
+     */
+    bySessionTotal?: number;
     total: {
         calls: number;
         input: number;
@@ -213,6 +219,8 @@ export interface UsageStats {
         output: number;
         cacheHit: number;
         cacheMiss: number;
+        /** 显式缓存写入（cacheMiss 子集，部分厂商单独报告）；issue #123 起按其单价计价。 */
+        cacheWrite?: number;
         cost: number;
         reasoning: number;
         /** Billed through a subscription plan (no per-token cost). */
@@ -228,6 +236,8 @@ export interface UsageStats {
         output: number;
         cacheHit: number;
         cacheMiss: number;
+        /** 显式缓存写入（cacheMiss 子集）；issue #123 起按其单价计价。 */
+        cacheWrite?: number;
         cost: number;
         reasoning: number;
     }>;
@@ -238,6 +248,8 @@ export interface UsageStats {
         output: number;
         cacheHit: number;
         cacheMiss: number;
+        /** 显式缓存写入（cacheMiss 子集）；issue #123 起按其单价计价。 */
+        cacheWrite?: number;
         cost: number;
     }>>;
     /** 模型 × 日期 × 站点 三维统计（[date][modelKey][siteKey]）：按 origin 绑定自定义价的
@@ -248,6 +260,8 @@ export interface UsageStats {
         output: number;
         cacheHit: number;
         cacheMiss: number;
+        /** 显式缓存写入（cacheMiss 子集）；issue #123 起按其单价计价。 */
+        cacheWrite?: number;
         cost: number;
         /** 该格全部调用都走订阅通道（聚合侧按三维格置位）；旧快照缺失，回退全局口径。 */
         plan?: boolean;

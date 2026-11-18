@@ -31,6 +31,18 @@ import type { ModelEntry } from './client/pricing.ts'
  * 价源 = 腾讯云 TokenHub「模型价格」页（2026-11-04 更新）的官方 CN 价。
  * Hy4 preview 条目与其价格一律不动——同 id 不同模型的收录不构成调价。
  *
+ * 2026-11-16 扩容：补录腾讯混元 TokenHub 新上架的 **Hy4 flash**（官方 id
+ * `hy4-flash`，刊例价 ¥0.5 / ¥0.02（缓存命中）/ ¥2 每百万 token；官方价目页
+ * 2026-11-16 更新）。价源 = 腾讯云 TokenHub「模型价格」页的官方 CN 价
+ * （models.dev 实时目录尚无该模型条目，国内厂商按官方 CN 价优先的价源口径取
+ * 官方价，不做 USD 折算）。官方同期挂出限时折扣：**自该说明发布之日起至
+ * 2026-11-30 12:00:00（北京时间）按目录价格的 50% 结算** —— 刊例价留在 price
+ * 表，折扣按 promo 建模（只在计价/显示出口折算）。折扣起点取官方价目页
+ * 「最近更新时间」2026-11-16 12:15:30（北京时间）——这是本仓能取证的该说明上线
+ * 时刻，官方未给出更早的明确日期，故不向前追溯（promo 起点规则同 Hy4）。
+ * 本批只加新条目：既有 Hy4 / Hy4 preview 条目的价格与折扣窗口一律不动
+ * （本次官方价目页上 Hy4 仍是 ¥6/¥0.3/¥18，与目录现状逐字一致，不构成调价）。
+ *
  * Time-of-day billing (peak/off-peak) is now real: DeepSeek V4 officially
  * splits peak (09:00-12:00 / 14:00-18:00 Beijing) at 2x the off-peak rate
  * from 2026-08-17, and Gemini's Flex tier discounts spare-capacity traffic.
@@ -39,7 +51,47 @@ import type { ModelEntry } from './client/pricing.ts'
 const DEEPSEEK_PEAK_HOURS = '09:00-12:00 / 14:00-18:00'
 const GEMINI_PEAK_HOURS = 'Standard / Flex'
 
-export const BUILTIN_MODEL_CATALOG: readonly ModelEntry[] = [
+/**
+ * 厂商「缓存写入」加价系数（issue #123）：厂商对「把内容写入缓存」按输入价的
+ * 倍数单独计费，models.dev 原生字段 `cache_write` 即该倍率。
+ * 2026-11-14 核对 models.dev 实时目录：OpenAI 11/11 恒为 125%、Anthropic 18/18
+ * 恒为 125%、百炼（阿里通义）约 125%（`qwen3.8-flash` 例外 156%）。
+ * 未列的厂商不落数值 → 缓存写入按输入价计（DeepSeek、月之暗面等本就不单列
+ * 缓存写入费，与旧口径逐字一致；MiniMax 高速档倍率不恒定，故不给规则）。
+ */
+const CACHE_WRITE_FACTORS: Readonly<Record<string, number>> = {
+  'OpenAI': 1.25,
+  'Anthropic': 1.25,
+  '阿里通义': 1.25,
+}
+
+/** 条目内官方「显式缓存创建」价（extraRows 行标签）——厂商公布的缓存写入单价。 */
+const CACHE_WRITE_ROW_LABEL = '显式缓存创建'
+
+/** 单价取整到 6 位小数：消除浮点乘法的尾数噪声（0.3 × 1.25 = 0.375 而非 0.37499…）。 */
+function roundUnitPrice(value: number): number {
+  return Number(value.toFixed(6))
+}
+
+/**
+ * 给目录条目补出缓存写入单价（issue #123）：条目自带官方「显式缓存创建」价时
+ * 以官方值为准（百炼各档比例不恒定），否则按厂商加价系数从输入价派生；
+ * 两者皆无 → 不落该字段，计价回退按输入价（与旧口径一致）。
+ * 只动主档：分时计价（offPeak）目前只有 DeepSeek，其缓存写入本就按输入价。
+ */
+function withCacheWritePrice(entry: ModelEntry): ModelEntry {
+  if (entry.price.cacheWrite !== undefined) return entry
+  const official = entry.extraRows?.find(row => row.label === CACHE_WRITE_ROW_LABEL)?.input
+  if (official !== undefined && official > 0) {
+    return { ...entry, price: { ...entry.price, cacheWrite: official } }
+  }
+  const factor = CACHE_WRITE_FACTORS[entry.provider]
+  if (factor === undefined || !(entry.price.input > 0)) return entry
+  return { ...entry, price: { ...entry.price, cacheWrite: roundUnitPrice(entry.price.input * factor) } }
+}
+
+/** 内置目录原始条目（缓存写入单价由 {@link withCacheWritePrice} 派生后导出）。 */
+const RAW_MODEL_CATALOG: readonly ModelEntry[] = [
   // DeepSeek — V4 peak/off-peak rates (cloud.tencent.com TokenHub 2026-08-14),
   // RMB per 1M tokens: peak / off-peak (50%).
   {
@@ -548,6 +600,26 @@ export const BUILTIN_MODEL_CATALOG: readonly ModelEntry[] = [
       startsAtMs: Date.UTC(2026, 10, 2, 16, 0, 0),
       endsAtMs: Date.UTC(2026, 11, 31, 15, 59, 59),
       note: '限时 5 折至 2026-12-31',
+    },
+  },
+  {
+    key: 'hunyuan-hy4-flash',
+    name: '混元 Hy4 flash',
+    provider: '腾讯混元',
+    colorVar: 'dsw-static-amber-400',
+    // 官方刊例价（元 / 每百万 token）：输入 ¥0.5（未命中）/ ¥0.02（命中）/ 输出 ¥2
+    // （腾讯云 TokenHub「模型价格」页 2026-11-16 更新；models.dev 实时目录尚无该模型，
+    //  国内厂商按「官方 CN 价优先」的价源口径取官方价，不做 USD 折算）。
+    price: { currency: 'CNY', input: 0.5, cacheHit: 0.02, output: 2 },
+    // 官方同期挂出限时折扣：自该说明发布之日起至 2026-11-30 12:00:00（北京时间），
+    // Hy4 flash 调用费用按目录价格的 50% 结算——活动期内按 ¥0.25 / ¥0.01 / ¥1 计。
+    // 起点取官方价目页「最近更新时间」2026-11-16 12:15:30（北京时间）：这是本仓
+    // 能取证的该说明上线时刻，官方未给出更早的明确日期，故不向前追溯。
+    promo: {
+      factor: 0.5,
+      startsAtMs: Date.UTC(2026, 10, 16, 4, 15, 30),
+      endsAtMs: Date.UTC(2026, 10, 30, 4, 0, 0),
+      note: '限时 5 折至 2026-11-30 12:00',
     },
   },
   // 腾讯混元 TokenHub 在售补充档（官方价目页 2026-11-04；翻译 / 角色扮演专用模型，
@@ -2114,6 +2186,13 @@ export const BUILTIN_MODEL_CATALOG: readonly ModelEntry[] = [
 ]
 
 /**
+ * 内置计费目录（导出态）：在原始条目上派生缓存写入单价（issue #123），
+ * 使「缓存写入」成为独立计价维度——厂商对写入缓存单独计价时（OpenAI/
+ * Anthropic/百炼），缓存写入 token 不再按普通输入价估算。
+ */
+export const BUILTIN_MODEL_CATALOG: readonly ModelEntry[] = RAW_MODEL_CATALOG.map(withCacheWritePrice)
+
+/**
  * 真实 provider model id → 计费目录键（`MODEL_CATALOG[].key`）的映射。未知 id
  * 原样保留并落回 `other`（未知模型不估算费用）。聚合层（aggregate.ts）在折叠时
  * 用同一张表把日志里的 model id 归并为目录键，客户端渲染（`modelOf`）也按它
@@ -2144,6 +2223,14 @@ export const BUILTIN_MODEL_KEY_ALIASES: Readonly<Record<string, string>> = {
   'deepseek-v4-flash-vision-exp': 'flash-vision-exp',
   // V4.1 Flash 正式版 id（官方公告 2026-09-10 前后发布）：计费同 flash 系时间线。
   'deepseek-v4.1-flash': 'flash',
+  // 裸 V4.1 代名（issue #125）：中转站有时把模型写成 `deepseek v4.1`（代名不带
+  // 档位后缀），归一到 flash。DeepSeek 的 V4.1 代就是 V4.1 Flash（官方价目页
+  // 规范名 deepseek-flash，目录键 flash）——models.dev 的 deepseek 厂商条目里也
+  // 没有独立的 V4.1，故按 V4.1 Flash 价与峰谷时间线计。
+  // 说明：issue #125 报告者的真实 id 是 `cn:deepseek-v4.1-flash`（带路由前缀 +
+  // 档位后缀），那条由「冒号分段归一」单独解决（剥前缀即上面的
+  // `deepseek-v4.1-flash`）；本键是为「代名不带档位」的写法补的归一。
+  'deepseek-v4.1': 'flash',
   // V4.1 Flash 限时内测端点（expires-on-0910，09-10 过期）：内测价 = flash 同价，
   // 收录它让存量账单的内测用量按 flash 时间线正确归并计费（issue #40 反馈）。
   'deepseek-v4.1-flash-expires-on-0910': 'flash',
@@ -2227,6 +2314,10 @@ export const BUILTIN_MODEL_KEY_ALIASES: Readonly<Record<string, string>> = {
   'hunyuan-hy4': 'hunyuan-hy4',
   'hy4-preview': 'hunyuan-hy4-preview',
   'hunyuan-hy4-preview': 'hunyuan-hy4-preview',
+  // Hy4 flash（2026-11-16 上架）：官方 id `hy4-flash`，与 Hy4 / Hy4 preview 各自
+  // 独立目录键——同族不同模型各记各的价与折扣窗口。
+  'hy4-flash': 'hunyuan-hy4-flash',
+  'hunyuan-hy4-flash': 'hunyuan-hy4-flash',
   'longcat-2.0': 'longcat-2.0',
   'longcat-2': 'longcat-2.0',
   'minicpm-v-4.5': 'minicpm-v-4.5',

@@ -15,7 +15,8 @@ import { stat } from 'node:fs/promises'
 import * as sessionTypes from '@deepseek-ai/dsh-session/types'
 import type { SessionEvent, SessionHeader, SessionId, SessionLogOffset as SessionLogOffsetT } from '@deepseek-ai/dsh-session/types'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
-import { isPriced, resolveCatalogKey, computeCostAt, modelOf, tierAt } from './client/pricing.ts'
+import { isPriced, resolveCatalogKey, computeCostAt, modelOf, tierAt, DEFAULT_PEAK_SHARE } from './client/pricing.ts'
+import type { ModelEntry } from './client/pricing.ts'
 import { BUILTIN_MODEL_KEY_ALIASES } from './builtin-catalog.ts'
 import { isSubscriptionProviderId } from './subscriptions.ts'
 
@@ -333,15 +334,16 @@ export function emptyUsage(): ModelUsage {
  */
 export function foldUsage(acc: ModelUsage, usage: TokenUsage, key: string, subscription: boolean, timeMs: number, official = false, pricedCost?: number, unverifiedChannel = false): void {
   const cacheHit = usage.cacheReadTokens ?? 0
-  const cacheMiss = usage.inputTokens + (usage.cacheWriteTokens ?? 0)
+  const cacheWrite = usage.cacheWriteTokens ?? 0
+  const cacheMiss = usage.inputTokens + cacheWrite
   acc.calls += 1
-  acc.input += usage.inputTokens + cacheHit + (usage.cacheWriteTokens ?? 0)
+  acc.input += usage.inputTokens + cacheHit + cacheWrite
   acc.output += usage.outputTokens
   acc.reasoning += usage.reasoningTokens ?? 0
   acc.cacheHit += cacheHit
   acc.cacheMiss += cacheMiss
   // 显式缓存写入是 cacheMiss 的子集，仅部分厂商单独报告；无该维度的调用不写字段。
-  if ((usage.cacheWriteTokens ?? 0) > 0) acc.cacheWrite = (acc.cacheWrite ?? 0) + (usage.cacheWriteTokens ?? 0)
+  if (cacheWrite > 0) acc.cacheWrite = (acc.cacheWrite ?? 0) + cacheWrite
   // 官方/三方分桶：官方直连调用数与其费用分别累加；三方=总量-官方。
   if (official) acc.officialCalls += 1
   // 订阅套餐不计费；未定价的模型（目录与 models.dev 补充条目都没有）记 0。
@@ -357,6 +359,7 @@ export function foldUsage(acc: ModelUsage, usage: TokenUsage, key: string, subsc
       input: cacheHit + cacheMiss,
       cacheHit,
       cacheMiss,
+      cacheWrite,
       output: usage.outputTokens,
     }, timeMs)
     acc.cost += thisCost
@@ -370,6 +373,88 @@ export function foldUsage(acc: ModelUsage, usage: TokenUsage, key: string, subsc
  * 部署可在插件配置 `searchCallEstimateCny` 覆盖（设 0 关闭估算）。
  */
 export const DEFAULT_SEARCH_CALL_ESTIMATE_CNY = 0.02
+
+/** 一次模型调用的折叠上下文（对话主循环与上下文压缩共用）。 */
+interface CallFoldContext {
+  /** 目标会话的折叠结果。 */
+  fold: SessionFold
+  /** 厂商上报的本次调用用量。 */
+  usage: TokenUsage
+  /** 计费目录键。 */
+  modelKey: string
+  /** 订阅套餐通道（不计费）。 */
+  subscription: boolean
+  /** 官方直连通道（vs 三方中转）。 */
+  official: boolean
+  /** 通道归组键（`site:` / `direct:` / `unknown`）。 */
+  siteBucket: string
+  /** 未知通道（配置外 provider）：支出主体不可核实，费用记 0（issue #82）。 */
+  unverifiedChannel: boolean
+  /** 调用时刻（epoch ms）：驱动时段档与促销判定。 */
+  timeMs: number
+  /** 事件所在自然日（本地时区）。 */
+  day: string
+}
+
+/**
+ * 折叠一次模型调用：token 分桶 + 计价 + 订阅/官方标记 + 角色归因。
+ *
+ * `assistant/message`（对话主循环）与 `compaction/summary`（上下文压缩摘要，
+ * issue #123）都是真实的模型调用——后者是宿主落盘的压缩摘要事件，自带
+ * `provider`/`model`/`usage`，此前整段被跳过，压缩调用的次数与费用零计入。
+ * 两者共用本函数，保证计费口径逐字一致。
+ * @returns 本次调用的目录条目与费用（未计价时为 undefined）。
+ */
+function foldModelCall(ctx: CallFoldContext): { entry: ModelEntry | undefined; cost: number | undefined } {
+  const { fold, usage, modelKey, subscription, official, siteBucket, unverifiedChannel, timeMs, day } = ctx
+  // 不可计价模型（目录外/无价，且非订阅通道）收集到 unpriced 集合，供聚合层暴露给用户提示。
+  // 未知通道（配置外 provider，issue #82）不计价：支出主体无法核实，与订阅豁免、
+  // 未收录模型同姿态——费用记 0、token 照常统计；已收录模型因通道未知而未计价时
+  // 不进 unpricedModels（模型本身可计价，是通道不可核实）。
+  const priced = !subscription && !unverifiedChannel && isPriced(modelKey)
+  if (!subscription && !isPriced(modelKey)) fold.unpricedModels.add(modelKey)
+  // modelOf 无条件解析（含未计价/订阅通道）：峰谷分桶需要它的档位语义判断，
+  // 与计价共用同一次查找，不额外增加热路径成本。
+  const entry = modelOf(modelKey)
+  // 本条调用的费用：一次计价全程复用（逐桶重算会让最热路径付出 N 倍常数）。
+  const thisCost = priced ? computeCostAt(entry, {
+    input: (usage.cacheReadTokens ?? 0) + usage.inputTokens + (usage.cacheWriteTokens ?? 0),
+    cacheHit: usage.cacheReadTokens ?? 0,
+    cacheMiss: usage.inputTokens + (usage.cacheWriteTokens ?? 0),
+    // 缓存写入单列计价（issue #123）：厂商对写入缓存单独收费时按其单价计。
+    cacheWrite: usage.cacheWriteTokens ?? 0,
+    output: usage.outputTokens,
+  }, timeMs) : undefined
+  foldUsage(fold.total, usage, modelKey, subscription, timeMs, official, thisCost, unverifiedChannel)
+  foldUsage(usageCell(fold.byModel, modelKey), usage, modelKey, subscription, timeMs, official, thisCost, unverifiedChannel)
+  foldUsage(usageCell(fold.byDay, day), usage, modelKey, subscription, timeMs, official, thisCost, unverifiedChannel)
+  foldUsage(modelDayCell(fold.byDayModels, day, modelKey), usage, modelKey, subscription, timeMs, official, thisCost, unverifiedChannel)
+  // 模型×日期×站点三维（issue #16）：供「按 origin 绑定自定义价」的显示层重估。
+  foldUsage(modelDaySiteCell(fold.byDayModelsSite, day, modelKey, siteBucket), usage, modelKey, subscription, timeMs, official, thisCost, unverifiedChannel)
+  foldUsage(usageCell(fold.bySite, siteBucket), usage, modelKey, subscription, timeMs, official, thisCost, unverifiedChannel)
+  // 峰谷分桶：与计费同口径逐调用判档（tierAt），峰谷占比因此是真实数据。
+  // 延迟档模型（tierSemantics='latency'，Gemini Standard/Flex）的计价与时刻
+  // 无关（peakShare 混合），不套北京峰谷窗分桶——否则峰谷占比条把无时间窗
+  // 语义的流量虚计入峰/谷（FOLD_VERSION 23）。
+  if (entry.tierSemantics !== 'latency') {
+    foldUsage(usageCell(fold.byTier, tierAt(timeMs)), usage, modelKey, subscription, timeMs, official, thisCost, unverifiedChannel)
+  }
+  if (subscription) fold.planCalls.set(modelKey, (fold.planCalls.get(modelKey) ?? 0) + 1)
+  // 三维格同款计数：provider 视图的行 plan 按本格判定，键与 byDayModelsSite 对齐。
+  if (subscription) {
+    const sitePlanKey = planSiteKey(day, modelKey, siteBucket)
+    fold.planSiteCalls.set(sitePlanKey, (fold.planSiteCalls.get(sitePlanKey) ?? 0) + 1)
+  }
+  // 角色归因：输出成本实测计价；输入成本 = 整次成本 - 输出部分，合并时
+  // 再按 user/tool 消息字符占比摊分。压缩调用同样计入（否则 byRole 合计
+  // 恒小于总费用，界面两处数字对不上）。
+  if (thisCost !== undefined && entry !== undefined) {
+    const outputCost = computeCostAt(entry, { input: 0, cacheHit: 0, cacheMiss: 0, output: usage.outputTokens }, timeMs)
+    fold.roles.outputCost += outputCost
+    fold.roles.inputCost += thisCost - outputCost
+  }
+  return { entry, cost: thisCost }
+}
 
 /**
  * Fold one auxiliary web-search LLM request (issue #15) into an accumulator.
@@ -484,6 +569,12 @@ export interface UsageStatsDocument {
   byTool?: Record<string, number>
   /** 会话明细：按费用倒序，封顶 {@link SESSION_ROW_LIMIT} 行；旧快照可能缺失。 */
   bySession: SessionUsageRow[]
+  /**
+   * 会话总数（未封顶）：`bySession` 只带花费前 {@link SESSION_ROW_LIMIT} 行，
+   * 真实总数此前从未下发——会话数超过封顶时面板只能说「共 100 个会话」，是错的。
+   * 旧快照缺该字段，客户端回退按明细行数。
+   */
+  bySessionTotal?: number
   /** 每轮费用明细：按起始时间倒序，封顶 {@link TURN_ROW_LIMIT} 行；旧快照可能缺失。 */
   byTurn?: TurnUsageRow[]
   /** 工作区聚合：按 cwd 末级目录归并，按费用倒序；旧快照可能缺失。 */
@@ -1152,7 +1243,14 @@ export function mergeUsageLedgerDocuments(document: UsageLedgerDocument, existin
 // 'latency'，Gemini Standard/Flex）按 DeepSeek 北京峰谷窗归桶：其计价与时刻
 // 无关（peakShare 混合），套窗分桶会让峰谷占比条虚含「时间窗计费」的流量。
 // bump 让日志仍在的会话重折出新峰谷口径；费用总额不受影响（byTier 仅展示层）。
-export const FOLD_VERSION = 23
+// 24：两条计费语义变更一并生效（issue #123）——(a) 上下文压缩摘要
+// （`compaction/summary`）计入统计：压缩是一次真实的模型调用（厂商照常计费），
+// 此前整段被跳过，压缩调用的次数/token/费用零计入（报告者实测 222 次
+// ≈ $25.33 漏计）；(b) 缓存写入成为独立计价维度：`cacheWriteTokens` 原先并入
+// cacheMiss 按普通输入价计，厂商对写入缓存单独收费时（OpenAI/Anthropic 恒为
+// 输入价 125%）按其官方单价计。两者都改变费用总额，bump 让日志仍在的会话
+// 全量重折补齐；日志已删的行按「历史定格」留在旧口径。
+export const FOLD_VERSION = 24
 
 /** 账本里拒读记录的条数上限：防异常环境（大量损坏日志）把账本撑爆；
  *  超限按 Map 插入序保留前 N 条（最早发现的先留，stamp 失效的自然被清理让位）。 */
@@ -1301,6 +1399,344 @@ function deserializeFold(fold: SerializedSessionFold): SessionFold {
     ...(fold.title !== undefined ? { title: fold.title } : {}),
   }
 }
+
+/**
+ * 兜底账本行的模型键归一与按日补价（issue #127）。
+ *
+ * 日志已删的会话只剩账本行：行内各模型桶的键是**落盘当时的原始 model id**
+ * （如 `cn:deepseek-v4.1-flash`），此前既不归一化（与已归一的 `flash` 分成两行
+ * 同名模型），也不重新计价（落盘时未收录的模型恒记 0 费 → 概览仍弹「未收录
+ * 计价」、账单少算这笔钱）。报告者实测：同一中转通道下两行同名
+ * DeepSeek V4.1 Flash，token 数完全一致——同一批数据被拆成两个 byModel 键。
+ *
+ * 本函数做两件事：
+ *
+ * 1. **键归一**：按 {@link resolveCatalogKey} 把各模型桶的键归到目录键，同键合并
+ *    （含模型×日、模型×日×通道、订阅计数与性能摘要各桶）。归一后账单只剩一行，
+ *    客户端 {@link modelOf} 的显示名也不会再撞车。
+ * 2. **按日补价**：落盘时未收录、而当前目录已收录的模型，用账本里现成的 token
+ *    桶按目录价补算费用——日志已删就没有请求级时间戳，只能按自然日取峰/谷两个
+ *    探针时刻后按 {@link DEFAULT_PEAK_SHARE} 混合（与客户端「目录价预估」同一
+ *    口径）；价格时代分段（峰谷时代 / flash 调价分界）与促销窗口仍按该时刻判定，
+ *    不套现行价重算历史。
+ *
+ * 只补「落盘时未收录」的那部分：落盘时已计价的用量其费用原样保留（历史事件按
+ * 事件发生时刻的官方规则计价，不能被按日估算覆盖）；订阅通道的调用恒免费，
+ * 不在未收录集合里，因此不会被补价。
+ *
+ * @param fold - 从账本行反序列化出的折叠（不得原地修改）。
+ * @param officialProviderIds - 官方直连 provider 名单（决定官方/三方拆分）。
+ * @returns 归一并补价后的折叠；无需改动时原样返回。
+ */
+function reconcileLedgerFold(fold: SessionFold, officialProviderIds: ReadonlySet<string> | undefined): SessionFold {
+  // ① 收集全部模型键（模型桶 / 未收录集合口径一致）。
+  const rawKeys = new Set<string>()
+  for (const key of fold.byModel.keys()) rawKeys.add(key)
+  for (const models of fold.byDayModels.values()) for (const key of models.keys()) rawKeys.add(key)
+  for (const models of fold.byDayModelsSite.values()) for (const key of models.keys()) rawKeys.add(key)
+  for (const key of fold.unpricedModels) rawKeys.add(key)
+  const resolvedOf = new Map<string, string>()
+  let rekey = false
+  for (const key of rawKeys) {
+    const resolved = resolveCatalogKey(key)
+    resolvedOf.set(key, resolved)
+    if (resolved !== key) rekey = true
+  }
+  const resolvedKeyOf = (key: string): string => resolvedOf.get(key) ?? resolveCatalogKey(key)
+  // ② 待补价的模型：落盘时在未收录集合里、且归一后当前目录已收录。
+  const repriceKeys = new Set<string>()
+  for (const key of fold.unpricedModels) {
+    if (isPriced(resolvedKeyOf(key))) repriceKeys.add(key)
+  }
+  if (!rekey && repriceKeys.size === 0) return fold
+
+  // ③ 重建各桶：模型键归一后同键合并。
+  const byModel = new Map<string, ModelUsage>()
+  const byDay = new Map<string, ModelUsage>()
+  const byDayModels = new Map<string, Map<string, ModelUsage>>()
+  const byDayModelsSite = new Map<string, Map<string, Map<string, ModelUsage>>>()
+  const bySite = new Map<string, ModelUsage>()
+  const byTier = new Map<string, ModelUsage>()
+  const unpricedModels = new Set<string>()
+  const planCalls = new Map<string, number>()
+  const planSiteCalls = new Map<string, number>()
+  const perfDigest = new Map<string, PerfModelDigest>()
+  const perfHourDigest = new Map<string, Map<string, PerfHourDigest>>()
+  for (const [key, cell] of fold.byModel) mergeUsageInto(usageCell(byModel, resolvedKeyOf(key)), cell)
+  for (const [day, cell] of fold.byDay) byDay.set(day, { ...cell })
+  for (const [day, models] of fold.byDayModels) {
+    const target = new Map<string, ModelUsage>()
+    for (const [key, cell] of models) mergeUsageInto(usageCell(target, resolvedKeyOf(key)), cell)
+    byDayModels.set(day, target)
+  }
+  for (const [day, models] of fold.byDayModelsSite) {
+    const target = new Map<string, Map<string, ModelUsage>>()
+    for (const [key, sites] of models) {
+      const siteTarget = new Map<string, ModelUsage>()
+      for (const [site, cell] of sites) mergeUsageInto(usageCell(siteTarget, site), cell)
+      const resolved = resolvedKeyOf(key)
+      const existing = target.get(resolved)
+      if (existing === undefined) {
+        target.set(resolved, siteTarget)
+      } else {
+        for (const [site, cell] of siteTarget) mergeUsageInto(usageCell(existing, site), cell)
+      }
+    }
+    byDayModelsSite.set(day, target)
+  }
+  for (const [site, cell] of fold.bySite) bySite.set(site, { ...cell })
+  for (const [tier, cell] of fold.byTier) byTier.set(tier, { ...cell })
+  for (const key of fold.unpricedModels) {
+    const resolved = resolvedKeyOf(key)
+    // 已收录的模型不再计入未收录提示（补价后费用照算）。
+    if (!isPriced(resolved)) unpricedModels.add(resolved)
+  }
+  for (const [key, count] of fold.planCalls) {
+    const resolved = resolvedKeyOf(key)
+    planCalls.set(resolved, (planCalls.get(resolved) ?? 0) + count)
+  }
+  for (const [key, count] of fold.planSiteCalls) {
+    // 键是 JSON 数组 [日, 模型, 站点]：模型键归一后重建。
+    const parsed = parsePlanSiteKey(key)
+    if (parsed === undefined) {
+      planSiteCalls.set(key, count)
+      continue
+    }
+    const next = planSiteKey(parsed.day, resolvedKeyOf(parsed.model), parsed.site)
+    planSiteCalls.set(next, (planSiteCalls.get(next) ?? 0) + count)
+  }
+  for (const [key, digest] of fold.perfDigest) {
+    const resolved = resolvedKeyOf(key)
+    const existing = perfDigest.get(resolved)
+    perfDigest.set(resolved, existing === undefined ? digest : mergeModelDigest(existing, digest))
+  }
+  for (const [hour, models] of fold.perfHourDigest) {
+    const target = new Map<string, PerfHourDigest>()
+    for (const [key, digest] of models) {
+      const resolved = resolvedKeyOf(key)
+      const existing = target.get(resolved)
+      target.set(resolved, existing === undefined ? digest : mergeHourDigest(existing, digest))
+    }
+    perfHourDigest.set(hour, target)
+  }
+
+  // ④ 按日补价：落盘时未收录、现已收录的模型，按目录价补算缺失的费用。
+  let addedCost = 0
+  let addedInput = 0
+  let addedOutput = 0
+  let addedOfficial = 0
+  let addedPeak = 0
+  let addedOff = 0
+  for (const [day, models] of fold.byDayModels) {
+    for (const [rawKey, cell] of models) {
+      if (!repriceKeys.has(rawKey)) continue
+      const resolved = resolvedKeyOf(rawKey)
+      const entry = modelOf(resolved)
+      // 模型×日桶是这天的权威 token 数：模型/日/总额三处按它补价（计价对 token
+      // 桶是线性的，与站点分摊之和逐位相等）。
+      const repriced = repriceCellByDay(entry, cell, day)
+      const dayCost = repriced.cost
+      const dayInput = repriced.inputCost
+      const dayOutput = repriced.outputCost
+      const dayPeak = repriced.peakCost
+      const dayOff = repriced.offCost
+      let dayOfficial = 0
+      // 站点级明细存在时按站点各补一份（通道桶要同步补价，官方/三方拆分靠站点归位）。
+      const siteCells = fold.byDayModelsSite.get(day)?.get(rawKey)
+      if (siteCells !== undefined && siteCells.size > 0) {
+        for (const [site, siteCell] of siteCells) {
+          const siteRepriced = repriceCellByDay(entry, siteCell, day)
+          const official = isOfficialSiteBucket(site, officialProviderIds)
+          if (official) dayOfficial += siteRepriced.cost
+          const siteTarget = byDayModelsSite.get(day)?.get(resolved)?.get(site)
+          if (siteTarget !== undefined) {
+            siteTarget.cost += siteRepriced.cost
+            if (official) siteTarget.officialCost += siteRepriced.cost
+          }
+          const siteBucketCell = bySite.get(site)
+          if (siteBucketCell !== undefined) {
+            siteBucketCell.cost += siteRepriced.cost
+            if (official) siteBucketCell.officialCost += siteRepriced.cost
+          }
+        }
+      }
+      const modelCell = byModel.get(resolved)
+      if (modelCell !== undefined) {
+        modelCell.cost += dayCost
+        modelCell.officialCost += dayOfficial
+      }
+      const dayCell = byDay.get(day)
+      if (dayCell !== undefined) {
+        dayCell.cost += dayCost
+        dayCell.officialCost += dayOfficial
+      }
+      const dayModelCell = byDayModels.get(day)?.get(resolved)
+      if (dayModelCell !== undefined) {
+        dayModelCell.cost += dayCost
+        dayModelCell.officialCost += dayOfficial
+      }
+      addedCost += dayCost
+      addedInput += dayInput
+      addedOutput += dayOutput
+      addedOfficial += dayOfficial
+      addedPeak += dayPeak
+      addedOff += dayOff
+    }
+  }
+  // 峰谷分摊：补价按峰/谷两档混合，峰谷占比随之同步（否则峰谷条与总费用对不上）。
+  const tierPeak = byTier.get('peak')
+  if (tierPeak !== undefined) tierPeak.cost += addedPeak
+  const tierOff = byTier.get('offPeak')
+  if (tierOff !== undefined) tierOff.cost += addedOff
+
+  // ⑤ 每轮明细：模型键归一；落盘时整轮未计价的按该轮起始时刻精确补价
+  //（每轮行带真实时刻，比按日估算更准；已计价的轮次不动——其 token 可能混着别的模型）。
+  const turns = fold.turns.map(row => {
+    const resolved = resolvedKeyOf(row.model)
+    if (!repriceKeys.has(row.model) || row.cost > 0) return { ...row, model: resolved }
+    const cost = computeCostAt(modelOf(resolved), {
+      input: row.input,
+      cacheHit: row.cacheHit,
+      cacheMiss: row.cacheMiss,
+      cacheWrite: 0,
+      output: row.output,
+    }, row.startedAt)
+    return { ...row, model: resolved, cost }
+  })
+
+  // ⑥ 角色归因：输入/输出侧拆分随补价同步，否则 byRole 合计会小于总费用。
+  const roles: RoleFold = {
+    ...fold.roles,
+    inputCost: fold.roles.inputCost + addedInput,
+    outputCost: fold.roles.outputCost + addedOutput,
+  }
+  const total: ModelUsage = {
+    ...fold.total,
+    cost: fold.total.cost + addedCost,
+    officialCost: fold.total.officialCost + addedOfficial,
+  }
+  return {
+    ...fold,
+    total,
+    byModel,
+    byDay,
+    byDayModels,
+    byDayModelsSite,
+    bySite,
+    byTier,
+    unpricedModels,
+    planCalls,
+    planSiteCalls,
+    perfDigest,
+    perfHourDigest,
+    turns,
+    roles,
+  }
+}
+
+/**
+ * 站点桶键能否还原官方直连（官方/三方费用拆分用）。
+ *
+ * 与 {@link officialChannelOf} 的通道判定同口径：配置了 officialProviderIds 时
+ * 以名单为准（站点桶还原不出 provider，保守按三方计）；未配置时
+ * `direct:<provider>` 看 provider 是否官方、`site:<origin>` 看 origin 是否官方。
+ */
+function isOfficialSiteBucket(siteKey: string, officialProviderIds: ReadonlySet<string> | undefined): boolean {
+  if (siteKey.startsWith('direct:')) {
+    const provider = siteKey.slice('direct:'.length)
+    return officialProviderIds !== undefined ? officialProviderIds.has(provider) : isOfficialProvider(provider)
+  }
+  if (siteKey.startsWith('site:')) {
+    if (officialProviderIds !== undefined) return false
+    return siteKey.slice('site:'.length) === OFFICIAL_DEEPSEEK_ORIGIN
+  }
+  return false
+}
+
+/** 解析 {@link planSiteKey} 的 JSON 数组键；形状不符时返回 undefined。 */
+function parsePlanSiteKey(key: string): { day: string; model: string; site: string } | undefined {
+  try {
+    const parsed: unknown = JSON.parse(key)
+    if (!Array.isArray(parsed) || parsed.length !== 3) return undefined
+    const [day, model, site] = parsed
+    if (typeof day !== 'string' || typeof model !== 'string' || typeof site !== 'string') return undefined
+    return { day, model, site }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 本地自然日（`YYYY-MM-DD`）内、北京时间某小时对应的时刻（epoch ms）。
+ *
+ * 兜底行按日补价时用两个探针时刻分别落峰档与谷档（北京时间 10:00 / 20:00）：
+ * 日志已删的会话没有请求级时间戳，只能按日估算（与客户端「目录价预估」同一口径）。
+ */
+function dayMomentAtBeijingHour(day: string, beijingHour: number): number {
+  const parts = day.split('-')
+  const year = Number(parts[0])
+  const month = Number(parts[1])
+  const date = Number(parts[2])
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(date)) return Date.now()
+  const base = new Date(year, month - 1, date, 0, 0, 0, 0).getTime()
+  if (!Number.isFinite(base)) return Date.now()
+  // 本地 00:00 对应的北京时间小时（北京时间 = UTC+8）。
+  const beijingHourAtBase = (new Date(base + 8 * 3_600_000).getUTCHours() + 24) % 24
+  const delta = (beijingHour - beijingHourAtBase + 24) % 24
+  return base + delta * 3_600_000
+}
+
+/** 兜底行补价的结果：总价 + 输入/输出侧拆分 + 峰谷两档分摊。 */
+interface LedgerReprice {
+  /** 补价总额（CNY）。 */
+  cost: number
+  /** 输入侧（缓存命中 + 未命中 + 缓存写入）费用（CNY）。 */
+  inputCost: number
+  /** 输出侧费用（CNY）。 */
+  outputCost: number
+  /** 峰档分摊（CNY）。 */
+  peakCost: number
+  /** 谷档分摊（CNY）。 */
+  offCost: number
+}
+
+/**
+ * 按自然日给一个 token 桶补价：峰/谷两档各取一个探针时刻后按比例混合。
+ *
+ * 价格时代分段（峰谷时代起点、flash 调价分界）与促销窗口由
+ * {@link computeCostAt} 按该时刻判定——不套现行价重算历史。输出侧费用单独算
+ * 一遍（计价对 token 桶是线性的），供角色归因拆分输入/输出两侧。
+ */
+function repriceCellByDay(entry: ModelEntry, cell: ModelUsage, day: string): LedgerReprice {
+  const buckets = {
+    input: cell.input,
+    cacheHit: cell.cacheHit,
+    cacheMiss: cell.cacheMiss,
+    cacheWrite: cell.cacheWrite ?? 0,
+    output: cell.output,
+  }
+  const outputOnly = { input: 0, cacheHit: 0, cacheMiss: 0, cacheWrite: 0, output: cell.output }
+  const tsPeak = dayMomentAtBeijingHour(day, LEDGER_PEAK_PROBE_HOUR)
+  const tsOff = dayMomentAtBeijingHour(day, LEDGER_OFFPEAK_PROBE_HOUR)
+  const peak = computeCostAt(entry, buckets, tsPeak)
+  const off = computeCostAt(entry, buckets, tsOff)
+  const peakOutput = computeCostAt(entry, outputOnly, tsPeak)
+  const offOutput = computeCostAt(entry, outputOnly, tsOff)
+  const cost = peak * DEFAULT_PEAK_SHARE + off * (1 - DEFAULT_PEAK_SHARE)
+  const outputCost = peakOutput * DEFAULT_PEAK_SHARE + offOutput * (1 - DEFAULT_PEAK_SHARE)
+  return {
+    cost,
+    inputCost: cost - outputCost,
+    outputCost,
+    peakCost: peak * DEFAULT_PEAK_SHARE,
+    offCost: off * (1 - DEFAULT_PEAK_SHARE),
+  }
+}
+
+/** 兜底行补价时的峰档探针时刻（北京时间小时）。 */
+const LEDGER_PEAK_PROBE_HOUR = 10
+/** 兜底行补价时的谷档探针时刻（北京时间小时）。 */
+const LEDGER_OFFPEAK_PROBE_HOUR = 20
 
 /** Runtime boundary for a user-editable/corrupt ledger file. Invalid rows are ignored. */
 function ledgerSessionsOf(value: unknown): UsageLedgerSession[] {
@@ -1612,6 +2048,37 @@ function foldInto(
       }
       continue
     }
+    if (event.type === 'compaction/summary') {
+      // 上下文压缩摘要（issue #123）：宿主落盘的压缩事件自带 provider/model/usage——
+      // 摘要是一次真实的模型调用（厂商照常计费），此前整段被跳过，压缩调用的
+      // 次数、token 与费用全部漏计（报告者实测 222 次 ≈ $25.33）。
+      // 归属不依赖 request/header：事件自带 provider 与 model。
+      const data = event.data as { provider?: unknown; model?: unknown; usage?: TokenUsage }
+      const compactionUsage = data.usage
+      if (compactionUsage === undefined) continue
+      if (typeof data.provider !== 'string' || typeof data.model !== 'string') continue
+      // 路由别名归位与通道判定口径与 assistant/message 一致。
+      const provider = routeAliases[data.provider] ?? data.provider
+      const modelKey = resolveCatalogKey(data.model)
+      const compactionSubscription = isSubscriptionCall(subscriptionProviders, provider)
+      // 订阅豁免命中的配置外通道归位 direct，与 header 口径一致（issue #37）。
+      const siteRef = siteRefOf(provider, routes, { subscription: compactionSubscription })
+      const compactionOfficial = officialChannelOf(provider, siteRef, officialProviderIds)
+      const compactionSiteBucket = siteBucketKey(siteRef)
+      // 压缩事件不带 turn/step：不进每轮明细与性能样本（宿主未记录 step 语义）。
+      foldModelCall({
+        fold,
+        usage: compactionUsage,
+        modelKey,
+        subscription: compactionSubscription,
+        official: compactionOfficial,
+        siteBucket: compactionSiteBucket,
+        unverifiedChannel: compactionSiteBucket === 'unknown',
+        timeMs: event.time,
+        day: dayStamp(event.time),
+      })
+      continue
+    }
     if (event.type !== 'assistant/message') continue
     const usage = (event.data as { usage?: TokenUsage }).usage
     if (usage === undefined) continue
@@ -1634,44 +2101,19 @@ function foldInto(
     // 时段按本次调用的实际时刻（event.time）精确判定，不再按固定比例混合。
     const modelKey = key
     const day = dayStamp(event.time)
-    // 不可计价模型（目录外/无价，且非订阅通道）收集到 unpriced 集合，供聚合层暴露给用户提示。
-    // 未知通道（配置外 provider，issue #82）不计价：支出主体无法核实，与订阅豁免、
-    // 未收录模型同姿态——费用记 0、token 照常统计；已收录模型因通道未知而未计价时
-    // 不进 unpricedModels（模型本身可计价，是通道不可核实）。
-    const unverifiedChannel = siteBucket === 'unknown'
-    const priced = !subscription && !unverifiedChannel && isPriced(modelKey)
-    if (!subscription && !isPriced(modelKey)) fold.unpricedModels.add(modelKey)
     // 本条消息折叠进 7 个桶 + 每轮明细，各桶费用完全相同：一次计价全程复用
     // （此前逐桶重算 computeCostAt/modelOf，折叠最热路径付出 9 倍计价常数）。
-    // modelOf 无条件解析（含未计价/订阅通道）：峰谷分桶需要它的档位语义判断，
-    // 与计价共用同一次查找，不额外增加热路径成本。
-    const entry = modelOf(modelKey)
-    const thisCost = priced ? computeCostAt(entry, {
-      input: (usage.cacheReadTokens ?? 0) + usage.inputTokens + (usage.cacheWriteTokens ?? 0),
-      cacheHit: usage.cacheReadTokens ?? 0,
-      cacheMiss: usage.inputTokens + (usage.cacheWriteTokens ?? 0),
-      output: usage.outputTokens,
-    }, event.time) : undefined
-    foldUsage(fold.total, usage, modelKey, subscription, event.time, official, thisCost, unverifiedChannel)
-    foldUsage(usageCell(fold.byModel, modelKey), usage, modelKey, subscription, event.time, official, thisCost, unverifiedChannel)
-    foldUsage(usageCell(fold.byDay, day), usage, modelKey, subscription, event.time, official, thisCost, unverifiedChannel)
-    foldUsage(modelDayCell(fold.byDayModels, day, modelKey), usage, modelKey, subscription, event.time, official, thisCost, unverifiedChannel)
-    // 模型×日期×站点三维（issue #16）：供「按 origin 绑定自定义价」的显示层重估。
-    foldUsage(modelDaySiteCell(fold.byDayModelsSite, day, modelKey, siteBucket), usage, modelKey, subscription, event.time, official, thisCost, unverifiedChannel)
-    foldUsage(usageCell(fold.bySite, siteBucket), usage, modelKey, subscription, event.time, official, thisCost, unverifiedChannel)
-    // 峰谷分桶：与计费同口径逐调用判档（tierAt），峰谷占比因此是真实数据。
-    // 延迟档模型（tierSemantics='latency'，Gemini Standard/Flex）的计价与时刻
-    // 无关（peakShare 混合），不套北京峰谷窗分桶——否则峰谷占比条把无时间窗
-    // 语义的流量虚计入峰/谷（FOLD_VERSION 23）。
-    if (entry.tierSemantics !== 'latency') {
-      foldUsage(usageCell(fold.byTier, tierAt(event.time)), usage, modelKey, subscription, event.time, official, thisCost, unverifiedChannel)
-    }
-    if (subscription) fold.planCalls.set(modelKey, (fold.planCalls.get(modelKey) ?? 0) + 1)
-    // 三维格同款计数：provider 视图的行 plan 按本格判定，键与 byDayModelsSite 对齐。
-    if (subscription) {
-      const sitePlanKey = planSiteKey(day, modelKey, siteBucket)
-      fold.planSiteCalls.set(sitePlanKey, (fold.planSiteCalls.get(sitePlanKey) ?? 0) + 1)
-    }
+    const { entry, cost: thisCost } = foldModelCall({
+      fold,
+      usage,
+      modelKey,
+      subscription,
+      official,
+      siteBucket,
+      unverifiedChannel: siteBucket === 'unknown',
+      timeMs: event.time,
+      day,
+    })
     // 每轮明细：同一轮内的调用累加进该轮状态（模型取最近一次的归属）。
     const turn = (event.data as { turn?: number }).turn ?? -1
     const state = turnState(turns, turn)
@@ -1682,11 +2124,6 @@ function foldInto(
     state.cacheMiss += usage.inputTokens + (usage.cacheWriteTokens ?? 0)
     if (thisCost !== undefined && entry !== undefined) {
       state.cost += thisCost
-      // 角色归因：输出成本实测计价；输入成本 = 整次成本 - 输出部分，合并时
-      // 再按 user/tool 消息字符占比摊分。
-      const outputCost = computeCostAt(entry, { input: 0, cacheHit: 0, cacheMiss: 0, output: usage.outputTokens }, event.time)
-      fold.roles.outputCost += outputCost
-      fold.roles.inputCost += thisCost - outputCost
     }
     if (state.startedAt === Number.MAX_SAFE_INTEGER) state.startedAt = event.time
     // 性能样本：该 step 的 TTFT / 生成速度 / 总延迟；无效样本不入集。
@@ -2055,6 +2492,19 @@ export function createUsageAggregator(persistence: UsagePersistence, options: Ag
       return fold
     }
   })()
+  // 账本行的归一与补价（issue #127）同样按行内容身份记忆：键归一 + 按日补价
+  // 每轮重算没有意义（账本行内容不变时结果相同），历史行多时按行记忆把每轮
+  // O(行数) 的重建降为 0。与 deserializedFoldOf 共用同一份行对象做键。
+  const reconciledFoldOf = (() => {
+    const memo = new WeakMap<SerializedSessionFold, SessionFold>()
+    return (serialized: SerializedSessionFold): SessionFold => {
+      const hit = memo.get(serialized)
+      if (hit !== undefined) return hit
+      const fold = reconcileLedgerFold(deserializedFoldOf(serialized), officialProviderIds)
+      memo.set(serialized, fold)
+      return fold
+    }
+  })()
   /** 每次聚合取最新的 provider 路由视图（中转站零配置发现）；缺省按空处理（全部未知路由）。
    *  叠加已注册 adapter 的通道（issue #91）：宿主 llm 注册表里的 provider 合成无 baseURL
    *  的空路由视图——siteRefOf 的路由命中分支正是「无 origin 直连」的语义，归位
@@ -2309,7 +2759,7 @@ export function createUsageAggregator(persistence: UsagePersistence, options: Ag
             && ledgerRow.stamp === stamp && (ledgerRow.foldVersion ?? 1) === FOLD_VERSION
             && ledgerRow.fingerprint === foldFingerprint
             && !foldNeedsReprice(ledgerRow.fold)) {
-            const fold = deserializedFoldOf(ledgerRow.fold)
+            const fold = reconciledFoldOf(ledgerRow.fold)
             folds.push({ id, ...(cwd === undefined ? {} : { cwd }), ...(subOf === undefined ? {} : { subOf }), fold })
             included.add(id)
             continue
@@ -2462,7 +2912,9 @@ export function createUsageAggregator(persistence: UsagePersistence, options: Ag
             // 缺失 foldVersion（迁移前的异常路径）按 v1 处理：保守标注旧算法。
             // 配置指纹不一致的行同样标 stale：其归属按旧配置算，与当前口径有偏差。
             const stale = (entry.foldVersion ?? 1) < FOLD_VERSION || entry.fingerprint !== foldFingerprint
-            const fold = deserializedFoldOf(entry.fold)
+            // 兜底行（日志已删）：键归一 + 按日补价（issue #127）——落盘时的原始
+            // model id 不归一化会分裂成两行同名模型，未收录模型还会恒记 0 费。
+            const fold = reconciledFoldOf(entry.fold)
             // 标题兜底（issue #103）：该会话的日志读不动（宿主拒绝该格式/代际），
             // 账本旧行的标题会停在重命名前的值；宿主侧的标题（投影缓存）优先。
             // 读得动的会话不走这里（included 命中即 continue），标题以日志为准。
@@ -2676,6 +3128,9 @@ export function createUsageAggregator(persistence: UsagePersistence, options: Ag
         byDayModels: toModelDayRecord(byDayModels),
         ...(byDayModelsSite.size === 0 ? {} : { byDayModelsSite: toModelDaySiteRecord(byDayModelsSite) }),
         bySession: sessionRows.slice(0, SESSION_ROW_LIMIT),
+        // 真实会话总数（未封顶）：面板的「共 N 个会话」按它说，不再把封顶行数
+        // 当成总数（旧快照缺该字段，客户端回退按行数）。
+        bySessionTotal: sessionRows.length,
         byTurn: turnRows.slice(0, TURN_ROW_LIMIT),
         byWorkspace: workspaces.slice(0, SESSION_ROW_LIMIT),
         ...(byTier.size === 0 ? {} : { byTier: { peak: byTier.get('peak') ?? emptyUsage(), offPeak: byTier.get('offPeak') ?? emptyUsage() } }),
@@ -2746,7 +3201,7 @@ export function createUsageAggregator(persistence: UsagePersistence, options: Ag
       const row = ledger.get(sessionId)
       if (row === undefined) return undefined
       try {
-        const fold = deserializedFoldOf(row.fold)
+        const fold = reconciledFoldOf(row.fold)
         return { calls: fold.total.calls, cost: fold.total.cost, input: fold.total.input, output: fold.total.output }
       } catch {
         // 账本行损坏（deserialize 抛错）：视为无数据，调用方走 doc 兜底。

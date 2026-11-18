@@ -520,6 +520,12 @@ export interface TokenUsageBuckets {
   cacheHit: number
   /** Cache-miss input tokens (already included in `input` by some providers). */
   cacheMiss: number
+  /**
+   * 显式缓存写入 token（issue #123）：**已包含在 `cacheMiss` 内**的子集——
+   * 厂商对「写入缓存」单独计价时（OpenAI/Anthropic 恒为输入价 125%），
+   * 这部分按缓存写入价计，不再按普通输入价。
+   */
+  cacheWrite?: number
   /** Output tokens. */
   output: number
 }
@@ -532,6 +538,13 @@ export interface PriceBand {
   cacheHit: number
   /** Cache-miss input price per 1M tokens (absent when folded into `input`). */
   cacheMiss?: number
+  /**
+   * 缓存写入单价（每百万 token，issue #123）：厂商对「把内容写入缓存」单独
+   * 计价时给出（models.dev 原生 `cache_write`：OpenAI/Anthropic 恒为输入价
+   * 125%）。**缺省 = 按 `input` 价计**——厂商不单列缓存写入费时（如 DeepSeek、
+   * 月之暗面）缓存写入本就按输入价出账，与旧口径一致。
+   */
+  cacheWrite?: number
   /** Output price per 1M tokens. */
   output: number
 }
@@ -564,7 +577,7 @@ export interface PricePromo {
    * 缓存 0.8 / 输入 0.8 / 输出 2/3）。缺省档位沿用 {@link factor}；单档取值
    * 仅 [0,1) 区间有效（0 = 该档活动期免费），非法值回落 factor。
    */
-  factors?: Partial<Record<'input' | 'cacheHit' | 'cacheMiss' | 'output', number>>
+  factors?: Partial<Record<'input' | 'cacheHit' | 'cacheMiss' | 'cacheWrite' | 'output', number>>
   /**
    * 截止时刻（epoch ms）：该时刻及之后恢复刊例价。缺省表示厂商未公布截止日
    * 的长期活动（如「限时 5 折直至另行通知」），持续生效直至收到公告后补填。
@@ -763,8 +776,16 @@ function extraModelByKey(): ReadonlyMap<string, ExtraModelPrice> {
  * - 剥离组织前缀（`deepseek/deepseek-v4-flash` → `deepseek-v4-flash`）；
  * - 剥离尾部纯数字段（`deepseek-v4-flash-202605` / `-0731` → `deepseek-v4-flash`，
  *   覆盖 TokenHub / 官方按日期滚动的快照 id）；
+ * - 剥离冒号分段：中转站路由前缀（`cn:deepseek-v4.1-flash` → `deepseek-v4.1-flash`）与
+ *   变体后缀（`deepseek-v4.1-flash:fast` → `deepseek-v4.1-flash`）——中转站
+ *   常按线路给模型加前缀（cn:/us:），网关常加变体后缀（:free / :1017），
+ *   这些形态此前一律落「未收录」记 0（issue #125）；
  * - 两者组合派生。目录键本身（如 `mistral-large-2512`、`command-a-03-2025`）
  *   在直接查就已命中，永不进入派生分支，不受剥段影响。
+ *
+ * 口径纪律：候选必须**原样**命中目录键（精确别名或归一化索引）才算数——剥段
+ * 只是找同一模型的另一种写法，不做「相近即认」的模糊猜测；剥完仍未命中就
+ * 保持原 id（回退 other，不计费）。
  */
 function derivedKeyCandidates(id: string): string[] {
   const out: string[] = []
@@ -785,6 +806,21 @@ function derivedKeyCandidates(id: string): string[] {
     const bare = id.slice(slash + 1)
     push(bare)
     stripTrailingDigits(bare)
+  }
+  // 冒号分段：前半段（路由前缀）与末段（变体后缀）各剥一次；全角冒号一并识别
+  // （中转站/用户手输 id 里全角「：」与半角等价，归一后同形）。
+  const segments = id.split(/[:：]/u)
+  if (segments.length > 1) {
+    for (let i = 1; i < segments.length; i += 1) {
+      const tail = segments.slice(i).join(':')
+      push(tail)
+      stripTrailingDigits(tail)
+    }
+    for (let i = 0; i < segments.length - 1; i += 1) {
+      const head = segments.slice(i, segments.length - 1).join(':')
+      push(head)
+      stripTrailingDigits(head)
+    }
   }
   stripTrailingDigits(id)
   return out
@@ -861,7 +897,21 @@ export function modelOf(key: string): ModelEntry {
   // 会把官方峰谷规则抹平（峰档 = 谷档 × 2 的计费口径丢失）。平档条目才整表替换。
   if (base.price.offPeak !== undefined) return base
   // 实时价是路由器的美元单价（平档、无时段区分）：整表替换并走汇率换算。
-  return { ...base, price: { currency: 'USD', input: live.input, cacheHit: live.cacheHit, output: live.output } }
+  // 缓存写入单价（issue #123）按目录条目的「写入/输入」倍率等比换算——厂商的
+  // 缓存写入加价率随输入价等比缩放；目录没有该维度时实时价也没有。
+  const cacheWrite = base.price.cacheWrite !== undefined && base.price.input > 0
+    ? live.input * (base.price.cacheWrite / base.price.input)
+    : undefined
+  return {
+    ...base,
+    price: {
+      currency: 'USD',
+      input: live.input,
+      cacheHit: live.cacheHit,
+      output: live.output,
+      ...(cacheWrite !== undefined ? { cacheWrite } : {}),
+    },
+  }
 }
 
 /** models.dev 补充条目转为目录条目：USD 直价（走汇率换算），无峰谷分档。 */
@@ -876,6 +926,9 @@ function extraEntryOf(extra: ExtraModelPrice): ModelEntry {
       input: extra.price.input,
       cacheHit: extra.price.cacheHit,
       output: extra.price.output,
+      // 缓存写入价（issue #123）：上游声明才有（models.dev 原生 `cache_write`），
+      // 缺省按输入价计。
+      ...(extra.price.cacheWrite !== undefined ? { cacheWrite: extra.price.cacheWrite } : {}),
     },
   }
 }
@@ -918,7 +971,7 @@ export function applyPromo(entry: ModelEntry, nowMs: number): ModelEntry {
   if (promo === undefined || !isPromoActive(promo, nowMs)) return entry
   // 分档覆盖只在厂商逐档给不同折扣时填写；未填档位沿用 factor。分档值与 factor
   // 同窗口 [0,1)（0 = 该档免费），非法值回落 factor（与 PricePromo 契约一致）。
-  const factorOf = (field: 'input' | 'cacheHit' | 'cacheMiss' | 'output'): number => {
+  const factorOf = (field: 'input' | 'cacheHit' | 'cacheMiss' | 'cacheWrite' | 'output'): number => {
     const perBand = promo.factors?.[field]
     return perBand !== undefined && perBand >= 0 && perBand < 1 ? perBand : promo.factor
   }
@@ -926,6 +979,7 @@ export function applyPromo(entry: ModelEntry, nowMs: number): ModelEntry {
     input: band.input * factorOf('input'),
     cacheHit: band.cacheHit * factorOf('cacheHit'),
     ...(band.cacheMiss !== undefined ? { cacheMiss: band.cacheMiss * factorOf('cacheMiss') } : {}),
+    ...(band.cacheWrite !== undefined ? { cacheWrite: band.cacheWrite * factorOf('cacheWrite') } : {}),
     output: band.output * factorOf('output'),
   })
   return {
@@ -1018,12 +1072,6 @@ export function catalogEntries(nowMs: number = Date.now()): readonly ModelEntry[
   })
 }
 
-/** Resolve a price-table row by its CSS variable name (theme token or fallback color). */
-export function resolveToken(name: string): string {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim()
-  return value !== '' ? value : '#8b95a3'
-}
-
 /**
  * Price one band's token usage in CNY. The stats `input` field is the TOTAL
  * prompt tokens (cacheHit + cacheMiss), so billing splits it: the cache-hit
@@ -1031,12 +1079,21 @@ export function resolveToken(name: string): string {
  * Providers that report only disjoint buckets carry `cacheMiss` explicitly;
  * otherwise the miss share is derived as `input - cacheHit`. Only USD-priced
  * bands go through the exchange rate.
+ *
+ * 缓存写入单列（issue #123）：`cacheWrite` 是 `cacheMiss` 的子集，厂商对它
+ * 单独计价（`band.cacheWrite`，缺省按输入价）。拆分后普通未命中按
+ * `band.cacheMiss ?? band.input`、缓存写入按 `band.cacheWrite ?? band.input`
+ * ——`cacheWrite` 缺省时两者同价，与旧口径逐字一致。
  */
 function priceBandCost(band: PriceBand, buckets: TokenUsageBuckets, currency: 'CNY' | 'USD'): number {
-  const miss = buckets.cacheMiss > 0 ? buckets.cacheMiss : Math.max(0, buckets.input - buckets.cacheHit)
+  const missTotal = buckets.cacheMiss > 0 ? buckets.cacheMiss : Math.max(0, buckets.input - buckets.cacheHit)
+  // 缓存写入是 cacheMiss 的子集：先切出来，剩余部分按普通未命中计价。
+  const write = Math.min(buckets.cacheWrite ?? 0, missTotal)
+  const miss = missTotal - write
   const hit = Math.min(buckets.cacheHit, buckets.input)
   const raw = (
     (miss * (band.cacheMiss ?? band.input))
+    + (write * (band.cacheWrite ?? band.input))
     + (hit * band.cacheHit)
     + (buckets.output * band.output)
   ) / 1_000_000

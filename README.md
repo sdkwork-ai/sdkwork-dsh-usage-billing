@@ -120,12 +120,12 @@
 
 ## 🚀 快速开始
 
-当前维护 DSH `0.1.2-alpha.1` ~ `0.2.2-rc.1` 的一份代码。正式版与预览版共享同一兼容矩阵：正式版使用 npm `latest`，预览版使用 `alpha`。当前 `latest` 指向 `1.8.3` 正式版（宿主 0.2.2-rc.1 兼容 + 输入栏悬浮闪烁修复 + 混元 Hy4 正式版目录扩容）；`alpha` 指向 `1.8.3-alpha.3`（队列任务在来源会话续跑），下一轮预览从 `1.8.3-alpha.4` 起。
+当前维护 DSH `0.1.2-alpha.1` ~ `0.2.2-rc.3` 的一份代码。正式版与预览版共享同一兼容矩阵：正式版使用 npm `latest`，预览版使用 `alpha`。当前 `latest` 指向 `1.8.8` 正式版（日志已删的存量账本行按目录键归一并按目录价补价 + 通道可见性 + 缓存写入按厂商费率独立计价 + 宿主 0.2.2-rc.3 零适配兼容）；`alpha` 指向 `1.8.3-alpha.12`（内容为正式版的子集），下一轮预览从 `1.8.3-alpha.13` 起。
 
 `dsh plugin add` 需要显式 `--profile`，且建议钉具体版本号，避免包管理器的发布冷静期解析到其他版本。当前正式版安装命令：
 
 ```sh
-dsh plugin --profile web add npm:@kenz1117/dsh-ui-usage-billing@1.8.3
+dsh plugin --profile web add npm:@kenz1117/dsh-ui-usage-billing@1.8.8
 ```
 
 默认安装也可使用 `@latest`。可用 `dsh --version` 或 `npm ls -g @deepseek-ai/dsh` 确认宿主版本。
@@ -184,17 +184,27 @@ GitHub Pages 发布。
 单价表（`src/client/pricing.ts`）采用**原生币种**存储：国内厂商直接录入人民币价格，国外厂商录入美元价格。费用统一以人民币计算与展示——美元模型按**实时汇率**折算，国内模型全程不经过汇率换算。启动时服务端拉取实时汇率与模型价（`src/pricing-fetch.ts`）：USD→CNY 优先腾讯财经行情（免 key、国内可达），失败依次降级 open.er-api 与内置默认值；之后每 6 小时后台刷新，单价表弹窗标注「今日汇率」与实时 / 内置徽标。金额与费率表的**展示币种跟随用户所选**：切 ¥ / $ 时把每条每百万 token 单价经 `convertUnitPrice` 按实时汇率换算到目标币种再显示（汇率缺失时回退原生币种）。
 
 ```
-cost（CNY）= (missInput × p_input + cacheHit × p_cacheHit + output × p_output) / 10⁶
+cost（CNY）= (missInput × p_input + cacheWrite × p_cacheWrite + cacheHit × p_cacheHit + output × p_output) / 10⁶
            —— 价格为原生币种；美元模型按实时 USD → CNY 汇率折算
 ```
 
 统计中的 `input` 为总输入（cacheHit + cacheMiss），估算按命中 / 未命中分拆计价，避免重复计费。支持双档计费的模型按 `DEFAULT_PEAK_SHARE`（默认 0.5）混合高峰与低谷档；周末（北京时间周六 / 周日）全天按低谷价计费。
+
+**缓存写入独立计价（issue #123）**：厂商上报的「写入缓存」token（`cacheWriteTokens`）是未命中输入的子集，厂商对它**单独收费**时按其单价计——OpenAI / Anthropic 恒为输入价的 125%（models.dev 原生 `cache_write`），百炼按官方「显式缓存创建」价。插件把这部分从普通输入价里拆出来单列计价，厂商不单列缓存写入费时（DeepSeek、月之暗面等）仍按输入价计——与旧口径一致。目录里的缓存写入单价只从有据来源派生：厂商加价规则 + 条目内官方价，不凭空取值。
+
+**上下文压缩调用计入统计（issue #123）**：DSH 触发上下文压缩时会产生一次真实的模型调用（厂商照常计费），宿主把它落成 `compaction/summary` 事件（自带 provider / model / usage）。插件此前只统计对话主循环的 `assistant/message`，压缩调用整段漏计（报告者实测 222 次 ≈ $25.33）。现在压缩调用与普通调用同一口径计入：调用数、输入 / 输出 / 缓存 token、费用，以及模型 / 日期 / 通道 / 峰谷各维度。
 
 **联网搜索请求按次估算**（issue #15）：DSH 的联网搜索绕过对话通道直连官方 `api.deepseek.com`，会话日志只记请求、无用量事件，而开放平台照常计费。插件对这类 `web/deepseek-search-llm-request` 事件按次估值计入费用（默认 0.02 元/次，配置 `searchCallEstimateCny` 可调整；设 0 关闭），并单独累计 `searchCalls` 供面板提示估算口径。
 
 **「本月预计」的口径**：本月已发生 + 近 7 个自然日节奏 × 本月剩余天数。只外推还没发生的天数，近期没花钱就不虚增——早期版本拿「本月有记录的天数」当分母求日均再乘整月天数，稀疏使用的月份会被放大数倍（实测 4 天记录、其余 19 天没用的月份被外推成实际值的 4 倍）。
 
 **自定义单价（设置 Tab，issue #16）**：结构化条目表（模型 + 可选来源 + 输入/缓存命中/输出 + 币种），不再手编 JSON。来源（中转站域名）留空 = 该模型默认价；填入中转站域名（如 `https://api.my-relay.com`）= 仅该来源的同名模型用此价（同名模型可同时存在默认价与多个来源价，互不覆盖）。显示层按「模型 × 来源」精确匹配重算，命中不到来源时回落该模型默认价，再无则用内置目录价。
+
+**未收录模型的补价入口（issue #125）**：概览顶部的「N 个模型未收录计价」提示条现在**直接列出未收录的模型 id**，并带「去补价」按钮（跳到设置页的自定义单价分区）；这些 id 同时进入自定义单价的候选列表（下拉直接选），不必回会话日志手抄——中转站的 id 常带路由前缀与全角冒号，抄错就是「自定义价没效果」。
+
+**通道可见性（设置 Tab，issue #126）**：通道多起来后（官方、直连、几个中转、未知路由）账单列表很长，可在设置里逐个通道勾选「显示」。隐藏的通道**不参与统计口径**——账单分组少掉该通道，概览累计、趋势与用量随之联动扣除。口径两条：只扣**可归属**的用量，旧格式会话（无通道维度）的用量宁可多算也不静默丢数；会话 / 工具 / 角色等没有通道维度的指标仍为全量。偏好存浏览器本地（`dsh.ui-usage-billing.channels`），按通道桶 key 记录（显示名随语言变，桶 key 稳定）。
+
+**用量行的提供方标注（issue #126）**：用量分区的模型排行在模型名下标出该模型走过的通道与 token 占比（如「直连 · zai-coding-cn · 100%」）——同名模型经不同通道（官方 / 直连 / 中转）时据此区分，不再只看到一行合并数字。
 
 ### 支持模型（2026-11 主流阵容，OpenAI 兼容系列，共 247 款）
 
@@ -232,6 +242,8 @@ cost（CNY）= (missInput × p_input + cacheHit × p_cacheHit + output × p_outp
 > ¹ 讯飞、商汤及美团 / 面壁智能 / 小红书等未公布官方按量单价的模型，表内为估算价（`estimated`）；这些模型走订阅通道（coding / token plan / opencode）时费用记 0。订阅通道与 pi-ai 内置提供方对齐（kimi-coding、zai-coding-cn、opencode、opencode-go、qwen / xiaomi 的 token-plan 各区域变体），可按 `subscriptionProviders` 配置覆盖。
 
 新增模型：在 `src/builtin-catalog.ts` 的 `BUILTIN_MODEL_CATALOG` 追加条目（别名表 `BUILTIN_MODEL_KEY_ALIASES` 同文件维护；目录只随 node 半构建，经 `/api/billing/pricing` 由宿主下发注入客户端）。**价源口径**：海外厂商取 models.dev 实时目录原生 USD；国内厂商优先取官方 CN 价（models.dev 的 `-cn` 目录），该目录缺项时按 USD 价 × 汇率折算并在条目注释标注。存量条目的价格更正走独立的调价节点，不与扩容混在一起。
+
+**模型 id 归一口径**：日志里的真实 model id 先按别名表精确匹配，再做归一化匹配（忽略大小写 / 分隔符 / 括号附注），最后由「派生候选」兜底 —— 剥组织前缀（`deepseek/deepseek-v4.1-flash`）、剥冒号分段（中转站的线路前缀 `cn:` / `us:`、网关的变体后缀 `:free` / `:1017`，全角「：」等价）、剥尾部日期段（`-202605` / `-0731`）。派生只用于**找到同一模型的另一种写法**：剥完仍不命中目录就保持原样（回退「其他模型」，费用记 0），绝不按别的模型的价格记账。
 
 ## 🔌 HTTP API
 
@@ -271,7 +283,7 @@ pnpm run build     # tsc -b && tsdown，产出 lib/index.js 与 lib/client.js
 
 ## 📦 发布
 
-本包为独立 npm 包，只维护一份 `main` 代码。正式版使用非预发布版本号并切 `latest`，预览版使用预发布版本号并切 `alpha`；当前 `latest` 指向 `1.8.3` 正式版，`alpha` 指向 `1.8.3-alpha.3`，详见 [COMPATIBILITY.md](COMPATIBILITY.md)。
+本包为独立 npm 包，只维护一份 `main` 代码。正式版使用非预发布版本号并切 `latest`，预览版使用预发布版本号并切 `alpha`；当前 `latest` 指向 `1.8.8` 正式版，`alpha` 指向 `1.8.3-alpha.12`，详见 [COMPATIBILITY.md](COMPATIBILITY.md)。
 
 ```sh
 pnpm test && pnpm run build   # 发版前全量测试 + 构建
@@ -286,7 +298,7 @@ npm dist-tag add @kenz1117/dsh-ui-usage-billing@<版本> latest  # 正式版
 
 - **权限等级：high**：读取持久会话日志（文件）、访问多厂商官方 / 订阅 / 余额 / 定价 API（网络）、经凭据 seam 读取 `apiKeyEnv`（凭据）、写入 harness home 下的账本、快照与任务队列（持久状态）。插件自身**不含**命令执行 / Shell；仅用户显式入队时才经宿主创建会话并提交 Prompt，Agent 的工具调用仍由宿主原有权限与审批控制。
 - **更新通道：`user-reviewed`**：本插件具备文件 / 网络 / 凭据能力，DSH STORE 采用每次安装需本机人工确认的通道；安装前请复核仓库、固定 Commit、生命周期脚本与影响范围。
-- **兼容范围**：当前 `main` 的正式版与预览版共享同一兼容矩阵，适配 DSH `0.1.2-alpha.1` ~ `0.2.2-rc.1`，共 34 项逐版本声明。当前正式版为 `1.8.3`（npm `latest`，宿主 0.2.2-rc.1 兼容 + 输入栏悬浮闪烁修复 + 混元 Hy4 正式版目录扩容），预览通道为 `1.8.3-alpha.3`（npm `alpha`，队列任务可在来源会话内继续执行）。发行通道与监控机制见 [COMPATIBILITY.md](COMPATIBILITY.md)。Node.js `^22.19.0 || >=24.0.0`。
+- **兼容范围**：当前 `main` 的正式版与预览版共享同一兼容矩阵，适配 DSH `0.1.2-alpha.1` ~ `0.2.2-rc.3`，共 36 项逐版本声明。当前正式版为 `1.8.8`（npm `latest`，日志已删的存量账本行按目录键归一并按目录价补价 + 通道可见性 + 缓存写入按厂商费率独立计价 + 宿主 0.2.2-rc.3 零适配兼容），预览通道为 `1.8.3-alpha.12`（npm `alpha`，内容为正式版的子集）。发行通道与监控机制见 [COMPATIBILITY.md](COMPATIBILITY.md)。Node.js `^22.19.0 || >=24.0.0`。
 - **生命周期**：无 `preinstall` / `install` / `postinstall` / `prepare`（安装即用）。
 - **不冒用官方**：仅新增自有 entry id `ui-usage-billing`；对 `@deepseek-ai/dsh-*` 仅为 `peerDependencies` 依赖（不重复安装 / 不替换 / 不遮蔽官方组件），包名使用第三方命名空间 `@kenz1117/*`。
 - **打包产物**：运行文件 `lib/*` 与 `cordis.patch.yml` 已随固定 Commit 提交并声明在 `files`。

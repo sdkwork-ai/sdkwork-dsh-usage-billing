@@ -11,13 +11,13 @@
 | 正式版 | 非预发布 SemVer，如 `1.8.0` | `latest` | 正式 Release | 已完成验收的默认安装版本 |
 | 预览版 | 带预发布后缀，如 `1.8.1-alpha.2` | `alpha` | Pre-release | 新功能与宿主适配的先行验证 |
 
-当前 npm `latest` 指向 `1.8.3` 正式版——宿主 `0.2.2-rc.1` 兼容、输入栏悬浮闪烁修复与混元 Hy4 正式版目录扩容；`alpha` 指向 `1.8.3-alpha.4`——取数失败不再渲染成「用量是 0」，界面显示带原因的失败态（issue #119）；下一轮预览将从 `1.8.3-alpha.5` 起。后续正式版只切 `latest`，预览版只切 `alpha`，不再同时切 `latest`。历史 npm 标签与分支保持原状，但不属于现行产品线、发布指引或 CI 校验范围。
+当前 npm `latest` 指向 `1.8.8` 正式版——issue #127：日志已删的存量账本行按目录键归一并同键合并、按目录价补算，不再分裂成两行同名模型（报告者已验收）；内容 = `1.8.7`（通道可见性、用量行标注提供方、通道名不截断、混元 Hy4 flash 计价，及逐轮图窗口与会话总数两处修正）+ 本次晋升；`alpha` 指向 `1.8.3-alpha.12`（内容为 `1.8.8` 的子集）；下一轮预览将从 `1.8.3-alpha.13` 起。后续正式版只切 `latest`，预览版只切 `alpha`，不再同时切 `latest`。历史 npm 标签与分支保持原状，但不属于现行产品线、发布指引或 CI 校验范围。
 
 ## 当前宿主兼容范围
 
-- 插件声明范围：DSH `0.1.2-alpha.1` ~ `0.2.2-rc.1`，即 `dsh: >=0.1.2-alpha.1`。
-- `package.json` 的 `dsh.compatibility.dshReleases` 逐版本声明，当前共 34 项。
-- 已核对的宿主 npm 标签：`alpha = 0.2.2-alpha.3`、`latest = 0.2.2-rc.1`、`next = 0.2.2-rc.1`。
+- 插件声明范围：DSH `0.1.2-alpha.1` ~ `0.2.2-rc.3`，即 `dsh: >=0.1.2-alpha.1`。
+- `package.json` 的 `dsh.compatibility.dshReleases` 逐版本声明，当前共 36 项。
+- 已核对的宿主 npm 标签：`alpha = 0.2.2-alpha.3`、`latest = 0.2.2-rc.1`、`next = 0.2.2-rc.3`。
 - Node.js：`^22.19.0 || >=24.0.0`。
 
 兼容以实际依赖与验证结果为准，不因版本号相邻就自动宣称兼容。宿主能力通过特性探测接入，缺席时按功能降级，不因此收窄整个插件的兼容矩阵。
@@ -27,7 +27,7 @@
 当前正式版建议钉精确版本：
 
 ```sh
-dsh plugin --profile web add npm:@kenz1117/dsh-ui-usage-billing@1.8.3
+dsh plugin --profile web add npm:@kenz1117/dsh-ui-usage-billing@1.8.8
 ```
 
 默认安装也可使用：
@@ -46,4 +46,4 @@ dsh plugin --profile web add npm:@kenz1117/dsh-ui-usage-billing@latest
 
 ## English summary
 
-This repository maintains one current `main` codebase and one host compatibility matrix. Stable releases use non-prerelease SemVer, npm `latest`, and regular GitHub Releases; previews use prerelease SemVer, npm `alpha`, and GitHub Pre-releases. npm `latest` currently points to the stable `1.8.3` release (host `0.2.2-rc.1` compatibility, the composer-hover flicker fix and the Hunyuan Hy4 GA catalog expansion); `alpha` points to `1.8.3-alpha.4` (failed usage-stat loads now surface as an explicit error state with the reason instead of zeros, issue #119). The declared host range is DSH `0.1.2-alpha.1` through `0.2.2-rc.1`, with 34 per-version declarations. Run `node scripts/check-compat.mjs` before and after compatibility or release changes.
+This repository maintains one current `main` codebase and one host compatibility matrix. Stable releases use non-prerelease SemVer, npm `latest`, and regular GitHub Releases; previews use prerelease SemVer, npm `alpha`, and GitHub Pre-releases. npm `latest` currently points to the stable `1.8.8` release (issue #127: ledger rows whose session logs were deleted are now merged by catalog key and repriced from the catalog, so the same data no longer splits into two identically named model rows — verified by the reporter; content = `1.8.7` plus this promotion). `alpha` points to `1.8.3-alpha.12` (a subset of the stable release). The declared host range is DSH `0.1.2-alpha.1` through `0.2.2-rc.3`, with 36 per-version declarations. Run `node scripts/check-compat.mjs` before and after compatibility or release changes.

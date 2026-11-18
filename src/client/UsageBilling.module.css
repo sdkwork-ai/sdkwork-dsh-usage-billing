@@ -33,7 +33,7 @@
  */
 
 /* 设计令牌（精致科技风）。暗亮机制：本文件无 [data-theme] 或媒体查询机制，取色全部经宿主 --dsw-* 别名（亮=body、暗=body[data-ds-dark-theme]），故表面/文字/描边令牌从宿主别名派生以自动跟随暗亮；因 var() 在声明元素上求值而宿主别名定义于 body，派生块挂 body 而非 :root。语义色/图表色/圆角/动效两主题同值，冻结硬编码。 */
-/* 语义六色挂 :root：硬编码两主题同值，且 pricing.ts 的 resolveToken 从 documentElement 读取，body 声明不向上继承、html 读不到。 */
+/* 语义六色挂 :root：硬编码两主题同值；宿主别名声明在 body，body 声明不向上继承、:root 读不到，故这六个只能冻结硬编码。 */
 :root {
   --ds-blue: #4f8cff;
   --ds-cyan: #2dd4bf;
@@ -92,7 +92,7 @@ body {
   --ds-t-pulse: 1.2s cubic-bezier(0.2,0.8,0.2,1);
   --ds-t-countup: 400ms cubic-bezier(0.22,1,0.36,1);
   --ds-t-scan: 900ms cubic-bezier(0.2,0.8,0.2,1);
-  /* 密度模式派生（v1.5）：默认挂 :root；紧凑/舒适档通过 [data-density]
+  /* 密度模式派生（v1.5）：默认挂 :root；紧凑/舒适档通过 [data-dsh-billing-density]
      选择器改写。读取侧从 .row/.panel 等派生 pad 与 row-h，省去各表面
      重复声明。 */
   --ds-density-pad-y: 10px;
@@ -103,15 +103,16 @@ body {
 
 /* 密度模式：紧凑档减小行高/字号/内边距，舒适档加大。
    触发由 client 端读 localStorage `dsh.ui-usage-billing.density` 写到
-   documentElement.dataset.density；切换瞬时生效。alpha 默认 'default'
-   ——用户主动开启才生效，老用户感官零变化。 */
-[data-density="compact"] {
+   documentElement.dataset.dshBillingDensity（= data-dsh-billing-density，属性名
+   命名空间化，避免与宿主/其他插件的同名属性互相覆盖，issue #124）；切换瞬时
+   生效。alpha 默认 'default' ——用户主动开启才生效，老用户感官零变化。 */
+[data-dsh-billing-density="compact"] {
   --ds-density-pad-y: 6px;
   --ds-density-pad-x: 10px;
   --ds-density-row-h: 26px;
   --ds-density-font: 11.5px;
 }
-[data-density="comfortable"] {
+[data-dsh-billing-density="comfortable"] {
   --ds-density-pad-y: 14px;
   --ds-density-pad-x: 18px;
   --ds-density-row-h: 40px;
@@ -122,34 +123,34 @@ body {
    default 档不写任何规则（保持 v1.4 精调值，零回归）。
    表面基准不同（panel 12/14、kpiTile 14/16、setCard 16/18、表格 7-10px），
    无法用单一令牌缩放，直接按档位覆盖最直白。 */
-:global([data-density="compact"]) .panel { padding: 8px 10px; }
-:global([data-density="compact"]) .kpiTile { padding: 10px 12px; }
-:global([data-density="compact"]) .setCard { padding: 10px 12px; }
-:global([data-density="compact"]) .ubCard { padding: 10px 12px; }
-:global([data-density="compact"]) .providerGroup { padding: 8px 10px; }
-:global([data-density="compact"]) .providerStatRow { padding: 6px 8px; gap: 8px; }
-:global([data-density="compact"]) .modelTable th,
-:global([data-density="compact"]) .modelTable td { padding: 6px 8px; }
-:global([data-density="compact"]) .ubTable th,
-:global([data-density="compact"]) .ubTable td { padding: 4px 7px; }
-:global([data-density="compact"]) .dashboardBody { padding: 12px 16px 16px; gap: 10px; }
-:global([data-density="compact"]) .tabNav { margin: 10px 16px 0; }
-:global([data-density="compact"]) .hero { padding: 12px 14px; gap: 8px; }
-:global([data-density="compact"]) .heroValue { font-size: 42px; line-height: 46px; }
+:global([data-dsh-billing-density="compact"]) .panel { padding: 8px 10px; }
+:global([data-dsh-billing-density="compact"]) .kpiTile { padding: 10px 12px; }
+:global([data-dsh-billing-density="compact"]) .setCard { padding: 10px 12px; }
+:global([data-dsh-billing-density="compact"]) .ubCard { padding: 10px 12px; }
+:global([data-dsh-billing-density="compact"]) .providerGroup { padding: 8px 10px; }
+:global([data-dsh-billing-density="compact"]) .providerStatRow { padding: 6px 8px; gap: 8px; }
+:global([data-dsh-billing-density="compact"]) .modelTable th,
+:global([data-dsh-billing-density="compact"]) .modelTable td { padding: 6px 8px; }
+:global([data-dsh-billing-density="compact"]) .ubTable th,
+:global([data-dsh-billing-density="compact"]) .ubTable td { padding: 4px 7px; }
+:global([data-dsh-billing-density="compact"]) .dashboardBody { padding: 12px 16px 16px; gap: 10px; }
+:global([data-dsh-billing-density="compact"]) .tabNav { margin: 10px 16px 0; }
+:global([data-dsh-billing-density="compact"]) .hero { padding: 12px 14px; gap: 8px; }
+:global([data-dsh-billing-density="compact"]) .heroValue { font-size: 42px; line-height: 46px; }
 
-:global([data-density="comfortable"]) .panel { padding: 16px 18px; }
-:global([data-density="comfortable"]) .kpiTile { padding: 18px 20px; }
-:global([data-density="comfortable"]) .setCard { padding: 20px 22px; }
-:global([data-density="comfortable"]) .ubCard { padding: 20px 22px; }
-:global([data-density="comfortable"]) .providerGroup { padding: 16px 18px; }
-:global([data-density="comfortable"]) .providerStatRow { padding: 14px 16px; gap: 14px; }
-:global([data-density="comfortable"]) .modelTable th,
-:global([data-density="comfortable"]) .modelTable td { padding: 13px 14px; }
-:global([data-density="comfortable"]) .ubTable th,
-:global([data-density="comfortable"]) .ubTable td { padding: 10px 12px; }
-:global([data-density="comfortable"]) .dashboardBody { padding: 20px 28px 28px; gap: 18px; }
-:global([data-density="comfortable"]) .hero { padding: 22px 24px; gap: 16px; }
-:global([data-density="comfortable"]) .heroValue { font-size: 56px; line-height: 60px; }
+:global([data-dsh-billing-density="comfortable"]) .panel { padding: 16px 18px; }
+:global([data-dsh-billing-density="comfortable"]) .kpiTile { padding: 18px 20px; }
+:global([data-dsh-billing-density="comfortable"]) .setCard { padding: 20px 22px; }
+:global([data-dsh-billing-density="comfortable"]) .ubCard { padding: 20px 22px; }
+:global([data-dsh-billing-density="comfortable"]) .providerGroup { padding: 16px 18px; }
+:global([data-dsh-billing-density="comfortable"]) .providerStatRow { padding: 14px 16px; gap: 14px; }
+:global([data-dsh-billing-density="comfortable"]) .modelTable th,
+:global([data-dsh-billing-density="comfortable"]) .modelTable td { padding: 13px 14px; }
+:global([data-dsh-billing-density="comfortable"]) .ubTable th,
+:global([data-dsh-billing-density="comfortable"]) .ubTable td { padding: 10px 12px; }
+:global([data-dsh-billing-density="comfortable"]) .dashboardBody { padding: 20px 28px 28px; gap: 18px; }
+:global([data-dsh-billing-density="comfortable"]) .hero { padding: 22px 24px; gap: 16px; }
+:global([data-dsh-billing-density="comfortable"]) .heroValue { font-size: 56px; line-height: 60px; }
 
 /* ── Sidebar footer trigger ─────────────────────────────────────────── */
 
@@ -309,18 +310,27 @@ body {
 }
 
 /* 动效强度档：用户可在设置 Tab 关闭/降低。
-   `off` 直接冻结所有 transition+animation；`subtle` 保留 160ms 微交互、
-   抑制更长动画（240ms / 1.2s / 400ms）；`rich` 即默认（无视觉差异）。 */
-[data-motion="off"] *,
-[data-motion="off"] *::before,
-[data-motion="off"] *::after {
+   `off` 冻结本插件内的全部 transition+animation；`subtle` 保留 transition 微交互
+   （按钮 hover / 状态过渡），把本插件内的关键帧动画压成瞬时；`rich` 即默认。
+
+   作用域限定（issue #124）：规则只作用在**本插件自有根容器** `.dsh-billing-root`
+   之内。此前属性挂在 <html> 上配通配符 `*` + !important，会把宿主与第三方插件的
+   全部动画一起压平（报告者实测右键菜单展开动画消失）。新增挂载点记得一并给根
+   容器挂 BILLING_ROOT_CLASS，漏标只会让该处动画不再被压制，不会外溢。
+   守卫：scripts/lint.mjs 守卫 10（动效选择器必须带 .dsh-billing-root）。 */
+:global([data-dsh-billing-motion="off"] .dsh-billing-root),
+:global([data-dsh-billing-motion="off"] .dsh-billing-root *),
+:global([data-dsh-billing-motion="off"] .dsh-billing-root *::before),
+:global([data-dsh-billing-motion="off"] .dsh-billing-root *::after) {
   transition: none !important;
   animation: none !important;
 }
-[data-motion="subtle"] *,
-[data-motion="subtle"] *::before,
-[data-motion="subtle"] *::after {
-  /* 仅抑制 240ms 以上动画；160ms 微交互保留（按钮 hover / 状态过渡）。 */
+:global([data-dsh-billing-motion="subtle"] .dsh-billing-root),
+:global([data-dsh-billing-motion="subtle"] .dsh-billing-root *),
+:global([data-dsh-billing-motion="subtle"] .dsh-billing-root *::before),
+:global([data-dsh-billing-motion="subtle"] .dsh-billing-root *::after) {
+  /* 关键帧动画压成瞬时（弹窗入场 / Tab 切换 / 呼吸脉冲 / 扫描 / 数据闪烁）；
+     transition 微交互保留。 */
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
 }
@@ -1409,6 +1419,66 @@ body {
 .unpricedHintBody {
   flex: 1;
   min-width: 0;
+}
+
+/* 通道可见性清单（issue #126）：逐通道一行（开关 + 名称 + 用量）。 */
+.channelVisList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 通道可见性卡整行铺开（issue #126 复访）：清单有十来行通道名，三列网格里每格
+   只有 1/3 宽，名称被省略号截成「a...」「12...」，前缀雷同根本分不出是哪条
+   中转线（报告者实测）。整卡横跨三列 → 名称有整行宽度可读。 */
+.channelVisCell {
+  grid-column: 1 / -1;
+}
+
+.channelVisRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 名称优先可读：宁可换行也不截断——「哪个通道」是这一页唯一的决策依据，
+   金额与用量只是参考，挤掉名称才是真的没法用。 */
+.channelVisName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.channelVisUsage {
+  flex: none;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+/* 未收录提示条的「去补价」动作（issue #125）：文字按钮，跳设置页的自定义单价
+   分区——未收录模型 id 在横幅里直接列出，用户不必回会话日志抄 id。 */
+.noticeAction {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  line-height: 15px;
+  cursor: pointer;
+  transition: background-color var(--ds-t-fast);
+}
+
+.noticeAction:hover,
+.noticeAction:focus-visible {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  outline: none;
 }
 
 /* v1.5：提示条 × 关闭按钮（琥珀幽灵钮，hover 加深）。 */
@@ -2775,6 +2845,28 @@ span.bandDot { cursor: default; }
   color: var(--ds-t-3);
 }
 
+/* 模型行的通道标注（issue #126）：同名模型经不同通道时据此区分。 */
+.modelChannels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.modelChannelTag {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 5px;
+  border: 1px solid var(--ds-border);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--ds-t-3);
+}
+
 /* ── Pricing collapse toggle ────────────────────────────────────────── */
 
 
@@ -2986,18 +3078,15 @@ span.bandDot { cursor: default; }
 
 /* ── 即时代费用条（composer dock）──────────────────────────────────── */
 
-/* 会话 composer 输入框下方的统计条：强玻璃胶囊，一行小字。 */
-/* 设计 fee-bar：圆角胶囊条 —— 档位 chip → 倒计时 → 档位说明 → 本轮/会话 → 额度预警 chips。 */
+/* 会话 composer 输入框下方的统计条：与宿主原生状态项同姿态的裸文本行（issue #120：
+   此前「强玻璃胶囊」外框（描边 + 玻璃底 + blur）在宿主无边框状态行旁像贴上去的盒子，
+   外框取消后条目直接落在宿主行上）。 */
+/* 设计 fee-bar：档位 chip → 倒计时 → 档位说明 → 本轮/会话 → 额度预警 chips。 */
 .feeBar {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 6px 12px;
-  border: 1px solid var(--ds-border-strong);
-  border-radius: 999px;
-  background: var(--dsb-glass-strong);
-  backdrop-filter: blur(14px) saturate(1.3);
   font-size: 11px;
   line-height: 16px;
   color: var(--ds-t-2);
@@ -3029,11 +3118,6 @@ span.bandDot { cursor: default; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   cursor: default;
-}
-.feeInline .feeChipPrimary,
-.feeInline .feeChipOff {
-  height: 18px;
-  padding: 0 7px;
 }
 .feeInlineNum {
   padding-right: 6px;
@@ -3069,17 +3153,18 @@ span.bandDot { cursor: default; }
 }
 .feeSep { color: var(--ds-t-4); }
 
-/* 档位 / 额度预警 chip：小胶囊，--dsb-3 底 + 1px 描边，状态 chip 覆写语义色文字与 30% 语义色描边。 */
+/* 档位 / 额度预警 chip：宿主状态 chip 语言（对齐模型选择器旁「夜间折扣」）——
+   无边框、4px 小圆角、语义色 12% tint 底、600 语义色文字。此前 1px 描边 + --dsb-3
+   实底 + 999px 在裸文本状态行里是「框中框」，与宿主元素并排时双重描边突兀（issue #120）。 */
 .feeChipPrimary,
 .feeChipOff,
 .feeChipAlert,
 .feeChipError {
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  padding: 0 8px;
-  border: 1px solid var(--ds-border);
-  border-radius: 999px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
   background: var(--dsb-3);
   font-size: 10px;
   line-height: 14px;
@@ -3087,10 +3172,10 @@ span.bandDot { cursor: default; }
   white-space: nowrap;
   font-weight: 600;
 }
-.feeChipPrimary { color: var(--ds-blue); border-color: color-mix(in srgb, var(--ds-blue) 30%, transparent); }
-.feeChipOff { color: var(--ds-cyan); border-color: color-mix(in srgb, var(--ds-cyan) 30%, transparent); }
-.feeChipAlert { color: var(--ds-amber); border-color: color-mix(in srgb, var(--ds-amber) 30%, transparent); }
-.feeChipError { color: var(--ds-red); border-color: color-mix(in srgb, var(--ds-red) 30%, transparent); }
+.feeChipPrimary { color: var(--ds-blue); background: color-mix(in srgb, var(--ds-blue) 12%, transparent); }
+.feeChipOff { color: var(--ds-cyan); background: color-mix(in srgb, var(--ds-cyan) 12%, transparent); }
+.feeChipAlert { color: var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 12%, transparent); }
+.feeChipError { color: var(--ds-red); background: color-mix(in srgb, var(--ds-red) 12%, transparent); }
 
 /* ── 余额天数提示 ───────────────────────────────────────────────────── */
 
@@ -4629,6 +4714,13 @@ span.bandDot { cursor: default; }
   border: 1px solid var(--ds-border);
   border-radius: var(--ds-r-1);
   min-width: 0;
+}
+
+/* 设置卡内的说明行（issue #126 通道可见性：已隐藏几个通道、统计口径已排除）。 */
+.setHint {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ds-t-3);
 }
 
 .setCardHead {

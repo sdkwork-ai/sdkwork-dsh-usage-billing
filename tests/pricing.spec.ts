@@ -9,7 +9,7 @@ import {
   applyBuiltinCatalog, applyLiveCatalogModels, applyLivePricing, applyPromo, canonModelId, catalogEntries, cnyToUsd, computeCost,
   computeCostAt, convertUnitPrice, formatMoney, formatPercent, formatTokens, formatUnitPrice,
   applyUserModelAliases,
-  getRateInfo, isPeakHour, isPromoActive, modelOf, resolveCatalogKey, tierAt, tierCountdown,
+  getRateInfo, isPeakHour, isPriced, isPromoActive, modelOf, resolveCatalogKey, tierAt, tierCountdown,
 } from '../src/client/pricing.ts'
 import { BUILTIN_MODEL_CATALOG, BUILTIN_MODEL_KEY_ALIASES } from '../src/builtin-catalog.ts'
 import { PROVIDER_ALIASES } from '../src/client/domain/provider-aliases.ts'
@@ -55,6 +55,41 @@ describe('canonModelId / resolveCatalogKey', () => {
     expect(resolveCatalogKey('k3')).toBe('kimi-k3')
     // 完全未知 id 原样返回（回退 other，不计费）。
     expect(resolveCatalogKey('no-such-model')).toBe('no-such-model')
+  })
+})
+
+describe('issue #125：中转站路由前缀 / 变体后缀的模型 id 归一', () => {
+  it('strips a relay route prefix so a known model is priced again', () => {
+    // 报告者形态：自定义模型 id `cn:deepseek v4.1`（中转站按线路加前缀）。
+    // 此前整个 id 落「未收录」→ 费用恒为 0（token 照常统计）。
+    expect(resolveCatalogKey('cn:deepseek v4.1')).toBe('flash')
+    expect(isPriced('cn:deepseek v4.1')).toBe(true)
+    // 全角冒号等价（手输 id 常见）。
+    expect(resolveCatalogKey('cn：deepseek v4.1')).toBe('flash')
+    // 前缀形态的已知模型同样归位（不只 DeepSeek 一家）。
+    expect(resolveCatalogKey('cn:deepseek-v4.1-flash')).toBe('flash')
+    expect(resolveCatalogKey('us:gpt-5.6-sol')).toBe('gpt-5.6-sol')
+  })
+
+  it('strips a variant suffix so the base model is priced', () => {
+    // 网关变体后缀（:free / :1017 一类）：去掉后按同模型计价。
+    expect(resolveCatalogKey('deepseek-v4.1-flash:fast')).toBe('flash')
+    expect(resolveCatalogKey('cn:deepseek-v4.1-flash:fast')).toBe('flash')
+  })
+
+  it('maps the bare V4.1 generation name onto the V4.1 Flash catalog key', () => {
+    // DeepSeek 的 V4.1 代即 V4.1 Flash（官方价目页规范名 deepseek-flash）。
+    expect(resolveCatalogKey('deepseek-v4.1')).toBe('flash')
+    expect(resolveCatalogKey('deepseek v4.1')).toBe('flash')
+    expect(modelOf('deepseek v4.1')).toMatchObject({ key: 'flash', name: 'DeepSeek V4.1 Flash' })
+    expect(modelOf('deepseek v4.1').price).toMatchObject({ currency: 'CNY', input: 2, cacheHit: 0.04, output: 8 })
+  })
+
+  it('never guesses: an unknown id stays unknown (no pricing by another model)', () => {
+    // 剥段只是找同一模型的另一种写法：剥完仍不命中就保持原样（回退 other）。
+    expect(resolveCatalogKey('cn:totally-unknown-xyz')).toBe('cn:totally-unknown-xyz')
+    expect(isPriced('cn:totally-unknown-xyz')).toBe(false)
+    expect(modelOf('cn:totally-unknown-xyz').key).toBe('other')
   })
 })
 
@@ -967,6 +1002,69 @@ describe('混元 Hy4 正式版定价（2026-11-04 扩容）', () => {
     expect(preview.key).toBe('hunyuan-hy4-preview')
     expect(preview.promo).toBeUndefined()
     expect(preview.price).toEqual({ currency: 'CNY', input: 6, cacheHit: 0.3, output: 18 })
+  })
+})
+
+describe('混元 Hy4 flash 定价（2026-11-16 扩容）', () => {
+  // 官方价目页（2026-11-16 更新）：Hy4 flash 刊例价 ¥0.5/¥0.02/¥2，自该说明发布
+  // 之日起至 2026-11-30 12:00:00（北京时间）按目录价格的 50% 结算。起点取官方
+  // 价目页「最近更新时间」——本仓能取证的上线时刻，官方未给更早日期，不向前追溯。
+  const PROMO_START = Date.UTC(2026, 10, 16, 4, 15, 30)
+  const PROMO_END = Date.UTC(2026, 10, 30, 4, 0, 0)
+
+  it('官方 id hy4-flash 归一到独立目录键（不与 Hy4 / preview 打架）', () => {
+    expect(resolveCatalogKey('hy4-flash')).toBe('hunyuan-hy4-flash')
+    expect(resolveCatalogKey('hunyuan-hy4-flash')).toBe('hunyuan-hy4-flash')
+    // 同族三个模型各自独立（扩容不是改价，也不是让 Hy4 flash 蹭 Hy4 的价）。
+    expect(resolveCatalogKey('hy4')).toBe('hunyuan-hy4')
+    expect(resolveCatalogKey('hy4-preview')).toBe('hunyuan-hy4-preview')
+  })
+
+  it('目录条目保存刊例价，折扣只存在于 promo 窗口', () => {
+    const entry = modelOf('hy4-flash')
+    expect(entry.key).toBe('hunyuan-hy4-flash')
+    expect(entry.price).toEqual({ currency: 'CNY', input: 0.5, cacheHit: 0.02, output: 2 })
+    expect(entry.promo?.factor).toBe(0.5)
+    expect(entry.promo?.startsAtMs).toBe(PROMO_START)
+    expect(entry.promo?.endsAtMs).toBe(PROMO_END)
+  })
+
+  it('促销期内按目录价的 5 折计费（¥0.25 / ¥0.01 / ¥1）', () => {
+    const priced = applyPromo(modelOf('hy4-flash'), Date.UTC(2026, 10, 16, 12, 0, 0))
+    expect(priced.price.input).toBe(0.25)
+    expect(priced.price.cacheHit).toBe(0.01)
+    expect(priced.price.output).toBe(1)
+  })
+
+  it('促销起止边界：起点前按刊例价，截止时刻起恢复刊例价', () => {
+    const entry = modelOf('hy4-flash')
+    expect(applyPromo(entry, PROMO_START - 1).price.input).toBe(0.5)
+    expect(applyPromo(entry, PROMO_START).price.input).toBe(0.25)
+    expect(applyPromo(entry, PROMO_END - 1).price.input).toBe(0.25)
+    expect(applyPromo(entry, PROMO_END).price.input).toBe(0.5)
+  })
+
+  it('按事件时刻计价：促销起点前的事件按刊例价，不被折扣追溯', () => {
+    const entry = modelOf('hy4-flash')
+    const buckets = { input: 1_000_000, cacheHit: 0, cacheMiss: 0, output: 0 }
+    expect(computeCostAt(entry, buckets, PROMO_START - 1)).toBeCloseTo(0.5, 6)
+    expect(computeCostAt(entry, buckets, PROMO_START + 3_600_000)).toBeCloseTo(0.25, 6)
+  })
+
+  it('扩容只加新条目：Hy4 / Hy4 preview 的价格与折扣窗口一律不动', () => {
+    expect(modelOf('hy4').price).toEqual({ currency: 'CNY', input: 6, cacheHit: 0.3, output: 18 })
+    expect(modelOf('hy4-preview').price).toEqual({ currency: 'CNY', input: 6, cacheHit: 0.3, output: 18 })
+    expect(modelOf('hy4-preview').promo).toBeUndefined()
+    expect(modelOf('hy4').promo?.endsAtMs).toBe(Date.UTC(2026, 11, 31, 15, 59, 59))
+  })
+
+  it('费率表面板能列出该条目（补录要真的出现在面板行里）', () => {
+    const row = catalogEntries().find(entry => entry.key === 'hunyuan-hy4-flash')
+    expect(row).toBeDefined()
+    expect(row?.provider).toBe('腾讯混元')
+    // 面板价随 promo 窗口变动（窗口内是 5 折，窗口外回刊例价）——按「此刻」的
+    // 折算结果断言，不写死某一档，免得促销结束后用例假失败。
+    expect(row?.price).toMatchObject(applyPromo(modelOf('hy4-flash'), Date.now()).price)
   })
 })
 

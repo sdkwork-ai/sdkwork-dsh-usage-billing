@@ -310,6 +310,7 @@ export type UsageBillingKey =
   | 'settingsSearchPlaceholder'
   | 'settingsSearchEmpty'
   | 'sessionsViewAll'
+  | 'sessionsViewTop'
   | 'sessionViewerSearch'
   | 'modelBudgetTitle'
   | 'modelBudgetHint'
@@ -356,6 +357,13 @@ export type UsageBillingKey =
   | 'popDirectLead'
   | 'popSubLead'
   | 'unpricedHint'
+  | 'channelVisibility'
+  | 'channelVisibilityHint'
+  | 'channelVisibilityShowAll'
+  | 'channelVisibilityHidden'
+  | 'channelVisibilityEmpty'
+  | 'unpricedMore'
+  | 'unpricedFix'
   | 'searchEstimateHint'
   | 'siteListDisplay'
   | 'siteListDisplayHint'
@@ -601,7 +609,7 @@ export const zh: Record<UsageBillingKey, string> = {
   'floatNoTargetsHint': '暂无可选的订阅通道。',
   'subscriptionsStale': '订阅额度刷新失败，以下为缓存数据',
   'balanceStaleNotice': '余额刷新较慢，以下为上一次查询结果',
-  'staleLedgerNotice': '{count} 个会话出自旧版算法存档（日志已删，无法重算），模型归属可能有误差',
+  'staleLedgerNotice': '{count} 个会话出自旧版算法存档（日志已删，费用按目录价重估），模型归属可能有误差',
   'staleSnapshotNotice': '用量正在重算，以下数据来自上一次计算（可能不是最新，会话标题等以工作区为准）',
   'statsLoadFailed': '统计数据读取失败，下方数字可能不完整',
   'unreadableNotice': '{count} 个会话的用量未完整计入（原始日志未动，不会丢失）',
@@ -766,6 +774,7 @@ export const zh: Record<UsageBillingKey, string> = {
   'settingsSearchPlaceholder': '搜索设置…（如：预算、峰谷、单价）',
   'settingsSearchEmpty': '没有匹配「{query}」的设置项',
   'sessionsViewAll': '查看全部 {count} 个会话',
+  'sessionsViewTop': '查看花费前 {count} 个会话',
   'sessionViewerSearch': '搜索会话…（标题 / 项目 / id）',
   'modelBudgetTitle': '按模型预算',
   'modelBudgetHint': '为单个模型设本月上限（人民币元）；跨 80% / 100% 各提醒一次，留空 = 不限。',
@@ -806,7 +815,14 @@ export const zh: Record<UsageBillingKey, string> = {
   'popNoConsumption': '暂无消耗',
   'popDirectLead': '直联',
   'popSubLead': '订阅',
-  'unpricedHint': '{count} 个模型未收录计价，费用已按 0 计',
+  'unpricedHint': '{count} 个模型未收录计价，费用已按 0 计：{models}',
+  'channelVisibility': '通道可见性',
+  'channelVisibilityHint': '隐藏的通道不参与统计口径：账单分组、概览数字、趋势与用量随之联动。会话 / 工具 / 角色等没有通道维度的指标仍为全量。',
+  'channelVisibilityShowAll': '全部显示',
+  'channelVisibilityHidden': '已隐藏 {count} 个通道，统计口径已排除其用量',
+  'channelVisibilityEmpty': '暂无通道数据',
+  'unpricedMore': '等 {count} 个',
+  'unpricedFix': '去补价',
   'searchEstimateHint': '含 {count} 次联网搜索请求的估算费用（每次约 {each}；日志无用量事件，按次估算，可在配置 searchCallEstimateCny 调整或关闭）',
   'siteListDisplay': '中转站列表',
   'siteListDisplayHint': '隐藏「未识别」占位条目与「未知路由」分组，净化列表',
@@ -1051,7 +1067,7 @@ export const en: Record<UsageBillingKey, string> = {
   'floatNoTargetsHint': 'No subscription channel available.',
   'subscriptionsStale': 'Subscription refresh failed — showing cached data',
   'balanceStaleNotice': 'Balance refresh is slow — the figures below come from the last completed query',
-  'staleLedgerNotice': '{count} sessions use legacy-algorithm archives (logs deleted); attribution may be off',
+  'staleLedgerNotice': '{count} sessions use legacy-algorithm archives (logs deleted; costs re-estimated at catalog prices); attribution may be off',
   'staleSnapshotNotice': 'Usage is being recomputed; the figures below come from the last completed calculation (session titles may lag the workspace)',
   'statsLoadFailed': 'Failed to read usage data; the figures below may be incomplete',
   'unreadableNotice': 'Usage from {count} sessions is not fully counted (raw logs untouched; no data lost)',
@@ -1214,6 +1230,7 @@ export const en: Record<UsageBillingKey, string> = {
   'settingsSearchPlaceholder': 'Search settings… (e.g. budget, peak, price)',
   'settingsSearchEmpty': 'No settings match "{query}"',
   'sessionsViewAll': 'View all {count} sessions',
+  'sessionsViewTop': 'View top {count} sessions by cost',
   'sessionViewerSearch': 'Search sessions… (title / project / id)',
   'modelBudgetTitle': 'Per-model budget',
   'modelBudgetHint': 'Set a monthly cap per model (CNY); alerts fire once each at 80% / 100%. Empty = unlimited.',
@@ -1256,7 +1273,14 @@ export const en: Record<UsageBillingKey, string> = {
   'popNoConsumption': 'No usage yet',
   'popDirectLead': 'Direct',
   'popSubLead': 'Subscription',
-  'unpricedHint': '{count} models not priced; their cost counts as 0',
+  'unpricedHint': '{count} models not priced; their cost counts as 0: {models}',
+  'channelVisibility': 'Channel visibility',
+  'channelVisibilityHint': 'Hidden channels are excluded from the statistics scope: billing groups, overview numbers, trends and usage follow along. Session / tool / role metrics have no channel dimension and stay global.',
+  'channelVisibilityShowAll': 'Show all',
+  'channelVisibilityHidden': '{count} channel(s) hidden — their usage is excluded from the statistics scope',
+  'channelVisibilityEmpty': 'No channel data yet',
+  'unpricedMore': '+{count} more',
+  'unpricedFix': 'Set price',
   'searchEstimateHint': 'Includes estimated cost of {count} web-search requests (~{each} each; no usage events logged, per-call estimate; tune via searchCallEstimateCny)',
   'siteListDisplay': 'Relay lists',
   'siteListDisplayHint': 'Hide "unidentified" placeholder rows in the relay quota list',

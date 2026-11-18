@@ -324,6 +324,12 @@ export interface UsageStatsDocument {
     byTool?: Record<string, number>;
     /** 会话明细：按费用倒序，封顶 {@link SESSION_ROW_LIMIT} 行；旧快照可能缺失。 */
     bySession: SessionUsageRow[];
+    /**
+     * 会话总数（未封顶）：`bySession` 只带花费前 {@link SESSION_ROW_LIMIT} 行，
+     * 真实总数此前从未下发——会话数超过封顶时面板只能说「共 100 个会话」，是错的。
+     * 旧快照缺该字段，客户端回退按明细行数。
+     */
+    bySessionTotal?: number;
     /** 每轮费用明细：按起始时间倒序，封顶 {@link TURN_ROW_LIMIT} 行；旧快照可能缺失。 */
     byTurn?: TurnUsageRow[];
     /** 工作区聚合：按 cwd 末级目录归并，按费用倒序；旧快照可能缺失。 */
@@ -697,7 +703,7 @@ export declare function mergeUsageLedgerDocuments(document: UsageLedgerDocument,
  * 会话费用只剩最近一段，issue #29）。
  * 持久账本行据此区分新旧算法：日志已删/不可读而只能沿用旧行时，UI 标注置信度提示。
  */
-export declare const FOLD_VERSION = 23;
+export declare const FOLD_VERSION = 24;
 /** 账本里拒读记录的条数上限：防异常环境（大量损坏日志）把账本撑爆；
  *  超限按 Map 插入序保留前 N 条（最早发现的先留，stamp 失效的自然被清理让位）。 */
 export declare const LEDGER_REFUSED_CAP = 500;
